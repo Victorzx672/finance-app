@@ -908,4 +908,66 @@ const appStyles = `
     text-align: center;
     padding: 16px 0;
   }
-`;
+
+ /* Mobile */
+  @media (max-width: 768px) {
+
+    .app-header {
+      padding: 14px 16px;
+      flex-direction: column;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .header-right {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .app-main {
+      padding: 20px 14px 40px;
+      gap: 18px;
+    }
+
+    .cards-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .summary-value {
+      font-size: 18px;
+    }
+
+    .panel {
+      padding: 18px;
+    }
+
+    .expense-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .expense-inputs {
+      flex-direction: column;
+    }
+
+    .inline-input--short {
+      max-width: 100%;
+    }
+
+    .btn-add {
+      width: 100%;
+      height: 42px;
+      font-size: 18px;
+    }
+
+    .panel-title {
+      font-size: 16px;
+      flex-wrap: wrap;
+    }
+
+    .header-title {
+      font-size: 16px;
+    }
+  }
+
+ `;
