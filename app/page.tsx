@@ -25,6 +25,14 @@ interface UserSalvo {
   usuario: string;
 }
 
+interface HistoricoMes {
+  id: number;
+  mesReferencia: string;
+  renda: number;
+  saldo: number;
+  totalGastos: number;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (valor: number) =>
@@ -89,15 +97,18 @@ function InputField({
   );
 }
 
-// ─── Custom Tooltip ───────────────────────────────────────────────────────────
-
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
+
   return (
     <div className="chart-tooltip">
       <p className="chart-tooltip-label">{label}</p>
       {payload.map((entry: any) => (
-        <p key={entry.name} className="chart-tooltip-value" style={{ color: entry.color }}>
+        <p
+          key={entry.name}
+          className="chart-tooltip-value"
+          style={{ color: entry.color }}
+        >
           <span>{entry.name}</span>
           <span>{fmt(entry.value)}</span>
         </p>
@@ -124,6 +135,7 @@ export default function Home() {
   const [meta, setMeta] = useState(0);
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [mesSelecionado, setMesSelecionado] = useState(getMesAtual());
+  const [historico, setHistorico] = useState<HistoricoMes[]>([]);
 
   // Expense form
   const [nomeGasto, setNomeGasto] = useState("");
@@ -143,7 +155,8 @@ export default function Home() {
   const taxa = 0.01;
   const mesesParaMeta = investimento > 0 ? Math.ceil(meta / investimento) : 0;
   const totalGastos = gastosFixos + gastosVariaveis + totalGastosDetalhados;
-  const percentGastos = renda > 0 ? Math.min((totalGastos / renda) * 100, 100) : 0;
+  const percentGastos =
+    renda > 0 ? Math.min((totalGastos / renda) * 100, 100) : 0;
 
   const dadosGrafico = Array.from({ length: 12 }, (_, i) => {
     const mes = i + 1;
@@ -156,6 +169,7 @@ export default function Home() {
   const carregarDados = async (userId: number, mes: string) => {
     try {
       setCarregado(false);
+
       const res = await fetch(`/api/finance?userId=${userId}&mes=${mes}`);
       const data = await res.json();
 
@@ -166,15 +180,34 @@ export default function Home() {
         setPercentualInvestimento(data.finance.percentualInvestimento ?? 0);
         setMeta(data.finance.meta ?? 0);
       } else {
-        setRenda(0); setGastosFixos(0); setGastosVariaveis(0);
-        setPercentualInvestimento(0); setMeta(0);
+        setRenda(0);
+        setGastosFixos(0);
+        setGastosVariaveis(0);
+        setPercentualInvestimento(0);
+        setMeta(0);
       }
+
       setGastos(data.gastos ?? []);
     } catch {
-      setRenda(0); setGastosFixos(0); setGastosVariaveis(0);
-      setPercentualInvestimento(0); setMeta(0); setGastos([]);
+      setRenda(0);
+      setGastosFixos(0);
+      setGastosVariaveis(0);
+      setPercentualInvestimento(0);
+      setMeta(0);
+      setGastos([]);
     } finally {
       setCarregado(true);
+    }
+  };
+
+  const carregarHistorico = async (userId: number) => {
+    try {
+      const res = await fetch(`/api/finance/history?userId=${userId}`);
+      const data = await res.json();
+
+      setHistorico(data.historico ?? []);
+    } catch {
+      setHistorico([]);
     }
   };
 
@@ -183,9 +216,11 @@ export default function Home() {
   useEffect(() => {
     const loginSalvo = localStorage.getItem("finance-login");
     const user = getUser();
+
     if (loginSalvo === "true" && user) {
       setLogado(true);
       carregarDados(user.id, mesSelecionado);
+      carregarHistorico(user.id);
     } else {
       setCarregado(true);
     }
@@ -193,8 +228,10 @@ export default function Home() {
 
   useEffect(() => {
     if (!logado) return;
+
     const user = getUser();
     if (!user) return;
+
     carregarDados(user.id, mesSelecionado);
   }, [mesSelecionado, logado]);
 
@@ -202,21 +239,30 @@ export default function Home() {
 
   useEffect(() => {
     if (!carregado || !logado) return;
+
     const user = getUser();
     if (!user) return;
 
     const salvar = async () => {
       setSalvando(true);
+
       try {
         await fetch("/api/finance", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId: user.id, mes: mesSelecionado,
-            renda, gastosFixos, gastosVariaveis,
-            percentualInvestimento, meta, gastos,
+            userId: user.id,
+            mes: mesSelecionado,
+            renda,
+            gastosFixos,
+            gastosVariaveis,
+            percentualInvestimento,
+            meta,
+            gastos,
           }),
         });
+
+        await carregarHistorico(user.id);
       } finally {
         setSalvando(false);
       }
@@ -224,25 +270,41 @@ export default function Home() {
 
     const debounce = setTimeout(salvar, 800);
     return () => clearTimeout(debounce);
-  }, [renda, gastosFixos, gastosVariaveis, percentualInvestimento, meta, gastos, carregado, logado, mesSelecionado]);
+  }, [
+    renda,
+    gastosFixos,
+    gastosVariaveis,
+    percentualInvestimento,
+    meta,
+    gastos,
+    carregado,
+    logado,
+    mesSelecionado,
+  ]);
 
   // ── Auth handlers ───────────────────────────────────────────────────────────
 
   const fazerLogin = async () => {
     if (!usuario || !senha) return;
+
     setLoadingLogin(true);
+
     try {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ usuario, senha }),
       });
+
       const data = await res.json();
+
       if (data.success) {
-        setLogado(true); setErroLogin("");
+        setLogado(true);
+        setErroLogin("");
         localStorage.setItem("finance-login", "true");
         localStorage.setItem("finance-user", JSON.stringify(data.user));
         carregarDados(data.user.id, mesSelecionado);
+        carregarHistorico(data.user.id);
       } else {
         setErroLogin(data.error ?? "Erro no login");
       }
@@ -255,14 +317,18 @@ export default function Home() {
 
   const cadastrar = async () => {
     if (!usuario || !senha) return;
+
     setLoadingLogin(true);
+
     try {
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ usuario, senha }),
       });
+
       const data = await res.json();
+
       if (data.success) {
         setModoCadastro(false);
         setErroLogin("Conta criada! Faça login.");
@@ -278,20 +344,37 @@ export default function Home() {
   };
 
   const sair = () => {
-    setLogado(false); setCarregado(false);
-    setRenda(0); setGastosFixos(0); setGastosVariaveis(0);
-    setPercentualInvestimento(0); setMeta(0); setGastos([]);
+    setLogado(false);
+    setCarregado(false);
+    setRenda(0);
+    setGastosFixos(0);
+    setGastosVariaveis(0);
+    setPercentualInvestimento(0);
+    setMeta(0);
+    setGastos([]);
+    setHistorico([]);
     localStorage.removeItem("finance-login");
     localStorage.removeItem("finance-user");
-    setUsuario(""); setSenha("");
+    setUsuario("");
+    setSenha("");
   };
 
   // ── Expense handlers ────────────────────────────────────────────────────────
 
   const adicionarGasto = () => {
     if (!nomeGasto.trim() || valorGasto <= 0) return;
-    setGastos((prev) => [...prev, { id: crypto.randomUUID(), nome: nomeGasto.trim(), valor: valorGasto }]);
-    setNomeGasto(""); setValorGasto(0);
+
+    setGastos((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        nome: nomeGasto.trim(),
+        valor: valorGasto,
+      },
+    ]);
+
+    setNomeGasto("");
+    setValorGasto(0);
   };
 
   const removerGasto = (id: string | number) =>
@@ -309,24 +392,61 @@ export default function Home() {
     return (
       <>
         <style>{authStyles}</style>
+
         <div className="auth-bg">
           <div className="auth-orb auth-orb--1" />
           <div className="auth-orb auth-orb--2" />
+
           <div className="auth-card">
             <div className="auth-icon-wrap">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
               </svg>
             </div>
-            <h1 className="auth-title">{modoCadastro ? "Criar conta" : "Bem-vindo"}</h1>
-            <p className="auth-sub">{modoCadastro ? "Comece seu controle financeiro" : "Acesse seu painel financeiro"}</p>
+
+            <h1 className="auth-title">
+              {modoCadastro ? "Criar conta" : "Bem-vindo"}
+            </h1>
+
+            <p className="auth-sub">
+              {modoCadastro
+                ? "Comece seu controle financeiro"
+                : "Acesse seu painel financeiro"}
+            </p>
 
             <div className="auth-form">
-              <InputField label="Usuário" placeholder="seu_usuario" value={usuario} onChange={setUsuario} />
-              <InputField label="Senha" placeholder="••••••••" type="password" value={senha} onChange={setSenha} />
+              <InputField
+                label="Usuário"
+                placeholder="seu_usuario"
+                value={usuario}
+                onChange={setUsuario}
+              />
+
+              <InputField
+                label="Senha"
+                placeholder="••••••••"
+                type="password"
+                value={senha}
+                onChange={setSenha}
+              />
 
               {erroLogin && (
-                <p className={`auth-msg ${erroLogin.includes("criada") ? "success" : "error"}`}>
+                <p
+                  className={`auth-msg ${
+                    erroLogin.includes("criada") ? "success" : "error"
+                  }`}
+                >
                   {erroLogin}
                 </p>
               )}
@@ -338,10 +458,20 @@ export default function Home() {
               >
                 {loadingLogin ? (
                   <span className="btn-spinner" />
-                ) : modoCadastro ? "Criar conta" : "Entrar"}
+                ) : modoCadastro ? (
+                  "Criar conta"
+                ) : (
+                  "Entrar"
+                )}
               </button>
 
-              <button className="btn-ghost" onClick={() => { setModoCadastro(!modoCadastro); setErroLogin(""); }}>
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  setModoCadastro(!modoCadastro);
+                  setErroLogin("");
+                }}
+              >
                 {modoCadastro ? "Já tenho uma conta" : "Não tenho conta ainda"}
               </button>
             </div>
@@ -365,13 +495,27 @@ export default function Home() {
         <header className="app-header">
           <div className="header-left">
             <div className="header-logo-wrap">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
               </svg>
             </div>
+
             <div>
               <span className="header-title">Finanças</span>
-              {userSalvo && <span className="header-user">@{userSalvo.usuario}</span>}
+              {userSalvo && (
+                <span className="header-user">@{userSalvo.usuario}</span>
+              )}
             </div>
           </div>
 
@@ -382,35 +526,47 @@ export default function Home() {
                 Salvando
               </span>
             )}
-            <button className="btn-logout" onClick={sair}>Sair</button>
+
+            <button className="btn-logout" onClick={sair}>
+              Sair
+            </button>
           </div>
         </header>
 
         <main className="app-main">
-
-          {/* Month selector */}
           <section className="month-bar">
             <div className="month-bar-left">
               <span className="month-label">Período</span>
+
               <select
                 className="month-select"
                 value={mesSelecionado}
                 onChange={(e) => setMesSelecionado(e.target.value)}
               >
                 {mesesDisponiveis.map((mes) => (
-                  <option key={mes.value} value={mes.value}>{mes.label}</option>
+                  <option key={mes.value} value={mes.value}>
+                    {mes.label}
+                  </option>
                 ))}
               </select>
             </div>
+
             <div className="month-bar-right">
               <div className="spend-bar-wrap">
                 <div className="spend-bar-label">
                   <span>Comprometimento da renda</span>
                   <span>{percentGastos.toFixed(0)}%</span>
                 </div>
+
                 <div className="spend-bar-track">
                   <div
-                    className={`spend-bar-fill ${percentGastos > 80 ? "danger" : percentGastos > 60 ? "warning" : "ok"}`}
+                    className={`spend-bar-fill ${
+                      percentGastos > 80
+                        ? "danger"
+                        : percentGastos > 60
+                        ? "warning"
+                        : "ok"
+                    }`}
                     style={{ width: `${percentGastos}%` }}
                   />
                 </div>
@@ -418,75 +574,176 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Summary cards */}
           <div className="cards-grid">
             <SummaryCard
               label="Saldo disponível"
               value={fmt(saldo)}
               accent={saldo >= 0 ? "green" : "red"}
-              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>}
+              icon={
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="2" y="5" width="20" height="14" rx="2" />
+                  <path d="M2 10h20" />
+                </svg>
+              }
               sub={saldo >= 0 ? "Positivo" : "Negativo"}
             />
+
             <SummaryCard
               label="Para investir"
               value={fmt(investimento)}
               accent="blue"
-              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>}
+              icon={
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                  <polyline points="17 6 23 6 23 12" />
+                </svg>
+              }
               sub={`${percentualInvestimento}% do saldo`}
             />
+
             <SummaryCard
               label="Gasto livre"
               value={fmt(gastoLivre)}
               accent="amber"
-              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>}
+              icon={
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v6l4 2" />
+                </svg>
+              }
               sub="Após investimento"
             />
+
             {meta > 0 && (
               <SummaryCard
                 label="Meta financeira"
                 value={fmt(meta)}
                 accent="purple"
-                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>}
-                sub={mesesParaMeta > 0 ? `Em ${mesesParaMeta} meses` : "Defina o investimento"}
+                icon={
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="12" r="6" />
+                    <circle cx="12" cy="12" r="2" />
+                  </svg>
+                }
+                sub={
+                  mesesParaMeta > 0
+                    ? `Em ${mesesParaMeta} meses`
+                    : "Defina o investimento"
+                }
               />
             )}
           </div>
 
-          <div className="two-col">
-            {/* Left: Inputs */}
+          <div className="main-layout">
             <section className="panel">
               <div className="panel-head">
                 <h2 className="panel-title">Receita &amp; Despesas</h2>
                 <p className="panel-sub">Preencha os valores do mês</p>
               </div>
+
               <div className="panel-body">
                 <div className="input-section">
                   <span className="input-section-label">Entrada</span>
-                  <InputField label="Renda mensal" type="number" placeholder="0,00" value={renda} onChange={(v) => setRenda(Number(v))} />
+
+                  <InputField
+                    label="Renda mensal"
+                    type="number"
+                    placeholder="0,00"
+                    value={renda}
+                    onChange={(v) => setRenda(Number(v))}
+                  />
                 </div>
+
                 <div className="input-divider" />
+
                 <div className="input-section">
                   <span className="input-section-label">Saídas</span>
-                  <InputField label="Gastos fixos" type="number" placeholder="0,00" value={gastosFixos} onChange={(v) => setGastosFixos(Number(v))} />
-                  <InputField label="Gastos variáveis" type="number" placeholder="0,00" value={gastosVariaveis} onChange={(v) => setGastosVariaveis(Number(v))} />
+
+                  <InputField
+                    label="Gastos fixos"
+                    type="number"
+                    placeholder="0,00"
+                    value={gastosFixos}
+                    onChange={(v) => setGastosFixos(Number(v))}
+                  />
+
+                  <InputField
+                    label="Gastos variáveis"
+                    type="number"
+                    placeholder="0,00"
+                    value={gastosVariaveis}
+                    onChange={(v) => setGastosVariaveis(Number(v))}
+                  />
                 </div>
+
                 <div className="input-divider" />
+
                 <div className="input-section">
                   <span className="input-section-label">Objetivos</span>
-                  <InputField label="% do saldo para investir" type="number" placeholder="0" value={percentualInvestimento} onChange={(v) => setPercentualInvestimento(Number(v))} />
-                  <InputField label="Meta financeira (R$)" type="number" placeholder="0,00" value={meta} onChange={(v) => setMeta(Number(v))} />
+
+                  <InputField
+                    label="% do saldo para investir"
+                    type="number"
+                    placeholder="0"
+                    value={percentualInvestimento}
+                    onChange={(v) => setPercentualInvestimento(Number(v))}
+                  />
+
+                  <InputField
+                    label="Meta financeira (R$)"
+                    type="number"
+                    placeholder="0,00"
+                    value={meta}
+                    onChange={(v) => setMeta(Number(v))}
+                  />
                 </div>
               </div>
             </section>
 
-            {/* Right col */}
             <div className="right-col">
-              {/* Expenses */}
               <section className="panel">
                 <div className="panel-head">
                   <h2 className="panel-title">Gastos detalhados</h2>
                   <p className="panel-sub">Registre despesas individuais</p>
                 </div>
+
                 <div className="expense-add-row">
                   <input
                     className="inline-input"
@@ -496,6 +753,7 @@ export default function Home() {
                     onChange={(e) => setNomeGasto(e.target.value)}
                     onKeyDown={onKeyDownGasto}
                   />
+
                   <input
                     className="inline-input inline-input--short"
                     type="number"
@@ -504,15 +762,41 @@ export default function Home() {
                     onChange={(e) => setValorGasto(Number(e.target.value))}
                     onKeyDown={onKeyDownGasto}
                   />
-                  <button className="btn-add" onClick={adicionarGasto} aria-label="Adicionar gasto">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+
+                  <button
+                    className="btn-add"
+                    onClick={adicionarGasto}
+                    aria-label="Adicionar gasto"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                    >
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
                   </button>
                 </div>
 
                 {gastos.length === 0 ? (
                   <div className="empty-state">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{opacity:0.3}}>
-                      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/>
+                    <svg
+                      width="32"
+                      height="32"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ opacity: 0.3 }}
+                    >
+                      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+                      <rect x="9" y="3" width="6" height="4" rx="1" />
                     </svg>
                     <p>Nenhum gasto adicionado</p>
                   </div>
@@ -522,12 +806,30 @@ export default function Home() {
                       <li key={gasto.id} className="expense-item">
                         <span className="expense-dot" />
                         <span className="expense-name">{gasto.nome}</span>
-                        <span className="expense-value">{fmt(gasto.valor)}</span>
-                        <button className="btn-remove" onClick={() => removerGasto(gasto.id)} aria-label={`Remover ${gasto.nome}`}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        <span className="expense-value">
+                          {fmt(gasto.valor)}
+                        </span>
+
+                        <button
+                          className="btn-remove"
+                          onClick={() => removerGasto(gasto.id)}
+                          aria-label={`Remover ${gasto.nome}`}
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          >
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
                         </button>
                       </li>
                     ))}
+
                     <li className="expense-total">
                       <span>Total</span>
                       <span>{fmt(totalGastosDetalhados)}</span>
@@ -536,34 +838,137 @@ export default function Home() {
                 )}
               </section>
 
-              {/* Chart */}
               <section className="panel">
                 <div className="panel-head">
                   <h2 className="panel-title">Projeção 12 meses</h2>
                   <span className="panel-badge">juros 1% a.m.</span>
                 </div>
+
                 {investimento <= 0 ? (
                   <div className="chart-empty">
-                    <p>Defina uma renda e porcentagem de investimento para ver a projeção.</p>
+                    <p>
+                      Defina uma renda e porcentagem de investimento para ver a
+                      projeção.
+                    </p>
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={dadosGrafico} margin={{ top: 8, right: 12, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                      <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#4b5563" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: "#4b5563" }} axisLine={false} tickLine={false}
-                        tickFormatter={(v) => Number(v) >= 1000 ? `${(Number(v) / 1000).toFixed(0)}k` : String(v)} />
+                    <LineChart
+                      data={dadosGrafico}
+                      margin={{ top: 8, right: 12, left: -10, bottom: 0 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="rgba(255,255,255,0.05)"
+                        vertical={false}
+                      />
+
+                      <XAxis
+                        dataKey="mes"
+                        tick={{ fontSize: 11, fill: "#4b5563" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+
+                      <YAxis
+                        tick={{ fontSize: 11, fill: "#4b5563" }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) =>
+                          Number(v) >= 1000
+                            ? `${(Number(v) / 1000).toFixed(0)}k`
+                            : String(v)
+                        }
+                      />
+
                       <Tooltip content={<CustomTooltip />} />
-                      {meta > 0 && <ReferenceLine y={meta} stroke="#a855f7" strokeDasharray="6 3" strokeWidth={1.5} />}
-                      <Line type="monotone" dataKey="valor" name="Patrimônio" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }} />
+
                       {meta > 0 && (
-                        <Line type="monotone" dataKey="meta" name="Meta" stroke="#a855f7" strokeDasharray="6 3" strokeWidth={1.5} dot={false} />
+                        <ReferenceLine
+                          y={meta}
+                          stroke="#a855f7"
+                          strokeDasharray="6 3"
+                          strokeWidth={1.5}
+                        />
+                      )}
+
+                      <Line
+                        type="monotone"
+                        dataKey="valor"
+                        name="Patrimônio"
+                        stroke="#3b82f6"
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{
+                          r: 5,
+                          fill: "#3b82f6",
+                          strokeWidth: 0,
+                        }}
+                      />
+
+                      {meta > 0 && (
+                        <Line
+                          type="monotone"
+                          dataKey="meta"
+                          name="Meta"
+                          stroke="#a855f7"
+                          strokeDasharray="6 3"
+                          strokeWidth={1.5}
+                          dot={false}
+                        />
                       )}
                     </LineChart>
                   </ResponsiveContainer>
                 )}
               </section>
             </div>
+
+            <aside className="history-panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Histórico mensal</h2>
+                <p className="panel-sub">Resumo dos meses salvos</p>
+              </div>
+
+              {historico.length === 0 ? (
+                <div className="history-empty">Nenhum mês salvo ainda.</div>
+              ) : (
+                <div className="history-list">
+                  {historico.map((item) => {
+                    const mesInfo = mesesDisponiveis.find(
+                      (m) => m.value === item.mesReferencia
+                    );
+
+                    return (
+                      <button
+                        key={item.id}
+                        className={`history-item ${
+                          item.mesReferencia === mesSelecionado ? "active" : ""
+                        }`}
+                        onClick={() => setMesSelecionado(item.mesReferencia)}
+                      >
+                        <span className="history-month">
+                          {mesInfo?.label ?? item.mesReferencia}
+                        </span>
+
+                        <span
+                          className={
+                            item.saldo >= 0
+                              ? "history-saldo positive"
+                              : "history-saldo negative"
+                          }
+                        >
+                          {fmt(item.saldo)}
+                        </span>
+
+                        <span className="history-sub">
+                          Gastos: {fmt(item.totalGastos)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </aside>
           </div>
         </main>
       </div>
@@ -574,7 +979,11 @@ export default function Home() {
 // ─── Summary Card ─────────────────────────────────────────────────────────────
 
 function SummaryCard({
-  label, value, accent, icon, sub,
+  label,
+  value,
+  accent,
+  icon,
+  sub,
 }: {
   label: string;
   value: string;
@@ -584,7 +993,9 @@ function SummaryCard({
 }) {
   return (
     <div className={`summary-card summary-card--${accent}`}>
-      <div className="summary-icon" aria-hidden="true">{icon}</div>
+      <div className="summary-icon" aria-hidden="true">
+        {icon}
+      </div>
       <span className="summary-label">{label}</span>
       <span className="summary-value">{value}</span>
       {sub && <span className="summary-sub">{sub}</span>}
@@ -884,15 +1295,13 @@ const appStyles = `
   }
 
   .app-main {
-    max-width: 1120px;
+    max-width: 1280px;
     margin: 0 auto;
     padding: 28px 24px 72px;
     display: flex;
     flex-direction: column;
     gap: 20px;
   }
-
-  /* Month bar */
 
   .month-bar {
     display: flex;
@@ -959,8 +1368,6 @@ const appStyles = `
   .spend-bar-fill.ok { background: var(--accent-green); }
   .spend-bar-fill.warning { background: var(--accent-amber); }
   .spend-bar-fill.danger { background: var(--accent-red); }
-
-  /* Summary cards */
 
   .cards-grid {
     display: grid;
@@ -1038,11 +1445,9 @@ const appStyles = `
     margin-top: 2px;
   }
 
-  /* Layout */
-
-  .two-col {
+  .main-layout {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 280px;
     gap: 20px;
     align-items: start;
   }
@@ -1053,7 +1458,8 @@ const appStyles = `
     gap: 20px;
   }
 
-  .panel {
+  .panel,
+  .history-panel {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 18px;
@@ -1101,8 +1507,6 @@ const appStyles = `
     flex-direction: column;
     gap: 0;
   }
-
-  /* Input sections */
 
   .input-section {
     display: flex;
@@ -1152,8 +1556,6 @@ const appStyles = `
 
   .input-group input::placeholder { color: rgba(255,255,255,0.12); }
 
-  /* Expense add row */
-
   .expense-add-row {
     display: flex;
     gap: 8px;
@@ -1197,8 +1599,6 @@ const appStyles = `
   }
 
   .btn-add:hover { opacity: 0.85; transform: scale(1.05); }
-
-  /* Expense list */
 
   .expense-list {
     list-style: none;
@@ -1251,7 +1651,6 @@ const appStyles = `
     cursor: pointer;
     line-height: 1;
     padding: 4px;
-    transition: color 0.15s;
     flex-shrink: 0;
     display: flex;
     opacity: 0;
@@ -1284,8 +1683,6 @@ const appStyles = `
     font-size: 13px;
     font-weight: 300;
   }
-
-  /* Chart */
 
   .chart-empty {
     padding: 28px 22px;
@@ -1323,14 +1720,83 @@ const appStyles = `
     font-variant-numeric: tabular-nums;
   }
 
-  /* Responsive */
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 18px 18px;
+  }
+
+  .history-item {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .history-item:hover {
+    border-color: rgba(79,142,247,0.35);
+    background: rgba(79,142,247,0.04);
+  }
+
+  .history-item.active {
+    border-color: rgba(79,142,247,0.55);
+    background: rgba(79,142,247,0.08);
+  }
+
+  .history-month {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .history-saldo {
+    font-size: 16px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .history-saldo.positive {
+    color: var(--accent-green);
+  }
+
+  .history-saldo.negative {
+    color: var(--accent-red);
+  }
+
+  .history-sub {
+    font-size: 11px;
+    color: var(--muted2);
+  }
+
+  .history-empty {
+    padding: 0 22px 22px;
+    font-size: 13px;
+    color: var(--muted2);
+  }
+
+  @media (max-width: 1050px) {
+    .main-layout {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .history-panel {
+      grid-column: 1 / -1;
+    }
+  }
 
   @media (max-width: 760px) {
     .app-header { padding: 0 16px; }
 
     .app-main { padding: 20px 14px 56px; }
 
-    .two-col { grid-template-columns: 1fr; }
+    .main-layout { grid-template-columns: 1fr; }
 
     .month-bar {
       flex-direction: column;
@@ -1348,5 +1814,7 @@ const appStyles = `
     .inline-input--short { flex: 1; }
 
     .btn-add { width: 100%; }
+
+    .btn-remove { opacity: 1; }
   }
 `;
