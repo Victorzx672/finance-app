@@ -14,7 +14,7 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Gasto {
-  id: string;
+  id: string | number;
   nome: string;
   valor: number;
 }
@@ -35,6 +35,28 @@ const getUser = (): UserSalvo | null => {
   return raw ? (JSON.parse(raw) as UserSalvo) : null;
 };
 
+const getMesAtual = () => {
+  const hoje = new Date();
+  const ano = hoje.getFullYear();
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+  return `${ano}-${mes}`;
+};
+
+const mesesDisponiveis = [
+  { value: "2026-01", label: "Janeiro 2026" },
+  { value: "2026-02", label: "Fevereiro 2026" },
+  { value: "2026-03", label: "Março 2026" },
+  { value: "2026-04", label: "Abril 2026" },
+  { value: "2026-05", label: "Maio 2026" },
+  { value: "2026-06", label: "Junho 2026" },
+  { value: "2026-07", label: "Julho 2026" },
+  { value: "2026-08", label: "Agosto 2026" },
+  { value: "2026-09", label: "Setembro 2026" },
+  { value: "2026-10", label: "Outubro 2026" },
+  { value: "2026-11", label: "Novembro 2026" },
+  { value: "2026-12", label: "Dezembro 2026" },
+];
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function InputField({
@@ -51,6 +73,7 @@ function InputField({
   onChange: (v: string) => void;
 }) {
   const id = useId();
+
   return (
     <div className="input-group">
       <label htmlFor={id}>{label}</label>
@@ -82,6 +105,7 @@ export default function Home() {
   const [percentualInvestimento, setPercentualInvestimento] = useState(0);
   const [meta, setMeta] = useState(0);
   const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [mesSelecionado, setMesSelecionado] = useState(getMesAtual());
 
   // Expense form
   const [nomeGasto, setNomeGasto] = useState("");
@@ -99,8 +123,7 @@ export default function Home() {
   const investimento = saldo * (percentualInvestimento / 100);
   const gastoLivre = saldo - investimento;
   const taxa = 0.01;
-  const mesesParaMeta =
-    investimento > 0 ? Math.ceil(meta / investimento) : 0;
+  const mesesParaMeta = investimento > 0 ? Math.ceil(meta / investimento) : 0;
 
   const dadosGrafico = Array.from({ length: 12 }, (_, i) => {
     const mes = i + 1;
@@ -110,9 +133,11 @@ export default function Home() {
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
-  const carregarDados = async (userId: number) => {
+  const carregarDados = async (userId: number, mes: string) => {
     try {
-      const res = await fetch(`/api/finance?userId=${userId}`);
+      setCarregado(false);
+
+      const res = await fetch(`/api/finance?userId=${userId}&mes=${mes}`);
       const data = await res.json();
 
       if (data.finance) {
@@ -121,11 +146,22 @@ export default function Home() {
         setGastosVariaveis(data.finance.gastosVariaveis ?? 0);
         setPercentualInvestimento(data.finance.percentualInvestimento ?? 0);
         setMeta(data.finance.meta ?? 0);
+      } else {
+        setRenda(0);
+        setGastosFixos(0);
+        setGastosVariaveis(0);
+        setPercentualInvestimento(0);
+        setMeta(0);
       }
 
-      if (data.gastos) setGastos(data.gastos);
+      setGastos(data.gastos ?? []);
     } catch {
-      // silently fail – user will see empty state
+      setRenda(0);
+      setGastosFixos(0);
+      setGastosVariaveis(0);
+      setPercentualInvestimento(0);
+      setMeta(0);
+      setGastos([]);
     } finally {
       setCarregado(true);
     }
@@ -139,28 +175,41 @@ export default function Home() {
 
     if (loginSalvo === "true" && user) {
       setLogado(true);
-      carregarDados(user.id);
+      carregarDados(user.id, mesSelecionado);
     } else {
-      setCarregado(true); // nothing to load
+      setCarregado(true);
     }
   }, []);
 
-  // ── Autosave (only after initial load) ─────────────────────────────────────
+  // ── Change month ────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!carregado) return;
+    if (!logado) return;
+
+    const user = getUser();
+    if (!user) return;
+
+    carregarDados(user.id, mesSelecionado);
+  }, [mesSelecionado, logado]);
+
+  // ── Autosave ────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!carregado || !logado) return;
 
     const user = getUser();
     if (!user) return;
 
     const salvar = async () => {
       setSalvando(true);
+
       try {
         await fetch("/api/finance", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             userId: user.id,
+            mes: mesSelecionado,
             renda,
             gastosFixos,
             gastosVariaveis,
@@ -176,19 +225,32 @@ export default function Home() {
 
     const debounce = setTimeout(salvar, 800);
     return () => clearTimeout(debounce);
-  }, [renda, gastosFixos, gastosVariaveis, percentualInvestimento, meta, gastos, carregado]);
+  }, [
+    renda,
+    gastosFixos,
+    gastosVariaveis,
+    percentualInvestimento,
+    meta,
+    gastos,
+    carregado,
+    logado,
+    mesSelecionado,
+  ]);
 
   // ── Auth handlers ───────────────────────────────────────────────────────────
 
   const fazerLogin = async () => {
     if (!usuario || !senha) return;
+
     setLoadingLogin(true);
+
     try {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ usuario, senha }),
       });
+
       const data = await res.json();
 
       if (data.success) {
@@ -196,7 +258,7 @@ export default function Home() {
         setErroLogin("");
         localStorage.setItem("finance-login", "true");
         localStorage.setItem("finance-user", JSON.stringify(data.user));
-        carregarDados(data.user.id);
+        carregarDados(data.user.id, mesSelecionado);
       } else {
         setErroLogin(data.error ?? "Erro no login");
       }
@@ -209,13 +271,16 @@ export default function Home() {
 
   const cadastrar = async () => {
     if (!usuario || !senha) return;
+
     setLoadingLogin(true);
+
     try {
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ usuario, senha }),
       });
+
       const data = await res.json();
 
       if (data.success) {
@@ -251,18 +316,22 @@ export default function Home() {
 
   const adicionarGasto = () => {
     if (!nomeGasto.trim() || valorGasto <= 0) return;
+
     setGastos((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), nome: nomeGasto.trim(), valor: valorGasto },
+      {
+        id: crypto.randomUUID(),
+        nome: nomeGasto.trim(),
+        valor: valorGasto,
+      },
     ]);
+
     setNomeGasto("");
     setValorGasto(0);
   };
 
-  const removerGasto = (id: string) =>
+  const removerGasto = (id: string | number) =>
     setGastos((prev) => prev.filter((g) => g.id !== id));
-
-  // ── Keyboard shortcut for expense input ────────────────────────────────────
 
   const onKeyDownGasto = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") adicionarGasto();
@@ -291,6 +360,7 @@ export default function Home() {
                 value={usuario}
                 onChange={setUsuario}
               />
+
               <InputField
                 label="Senha"
                 placeholder="••••••••"
@@ -300,7 +370,11 @@ export default function Home() {
               />
 
               {erroLogin && (
-                <p className={`auth-msg ${erroLogin.includes("criada") ? "success" : "error"}`}>
+                <p
+                  className={`auth-msg ${
+                    erroLogin.includes("criada") ? "success" : "error"
+                  }`}
+                >
                   {erroLogin}
                 </p>
               )}
@@ -310,12 +384,19 @@ export default function Home() {
                 onClick={modoCadastro ? cadastrar : fazerLogin}
                 disabled={loadingLogin || !usuario || !senha}
               >
-                {loadingLogin ? "Aguarde…" : modoCadastro ? "Criar conta" : "Entrar"}
+                {loadingLogin
+                  ? "Aguarde…"
+                  : modoCadastro
+                  ? "Criar conta"
+                  : "Entrar"}
               </button>
 
               <button
                 className="btn-ghost"
-                onClick={() => { setModoCadastro(!modoCadastro); setErroLogin(""); }}
+                onClick={() => {
+                  setModoCadastro(!modoCadastro);
+                  setErroLogin("");
+                }}
               >
                 {modoCadastro ? "Já tenho conta" : "Criar conta"}
               </button>
@@ -329,25 +410,60 @@ export default function Home() {
   return (
     <>
       <style>{appStyles}</style>
+
       <div className="app-bg">
-        {/* Header */}
         <header className="app-header">
           <div className="header-left">
             <span className="header-logo">₿</span>
             <span className="header-title">Controle Financeiro</span>
           </div>
+
           <div className="header-right">
             {salvando && <span className="saving-badge">Salvando…</span>}
-            <button className="btn-logout" onClick={sair}>Sair</button>
+            <button className="btn-logout" onClick={sair}>
+              Sair
+            </button>
           </div>
         </header>
 
         <main className="app-main">
-          {/* ── Summary Cards ─────────────────────────────────────── */}
+          <section className="panel month-panel">
+            <div>
+              <h2 className="panel-title">Mês de referência</h2>
+              <p className="month-subtitle">
+                Selecione o mês que deseja consultar ou editar.
+              </p>
+            </div>
+
+            <select
+              className="month-select"
+              value={mesSelecionado}
+              onChange={(e) => setMesSelecionado(e.target.value)}
+            >
+              {mesesDisponiveis.map((mes) => (
+                <option key={mes.value} value={mes.value}>
+                  {mes.label}
+                </option>
+              ))}
+            </select>
+          </section>
+
           <div className="cards-grid">
-            <SummaryCard label="Saldo disponível" value={fmt(saldo)} accent={saldo >= 0 ? "green" : "red"} />
-            <SummaryCard label="Para investir" value={fmt(investimento)} accent="blue" />
-            <SummaryCard label="Gasto livre" value={fmt(gastoLivre)} accent="amber" />
+            <SummaryCard
+              label="Saldo disponível"
+              value={fmt(saldo)}
+              accent={saldo >= 0 ? "green" : "red"}
+            />
+            <SummaryCard
+              label="Para investir"
+              value={fmt(investimento)}
+              accent="blue"
+            />
+            <SummaryCard
+              label="Gasto livre"
+              value={fmt(gastoLivre)}
+              accent="amber"
+            />
             {meta > 0 && (
               <SummaryCard
                 label={`Meta em ${mesesParaMeta} meses`}
@@ -358,7 +474,6 @@ export default function Home() {
           </div>
 
           <div className="two-col">
-            {/* ── Left column: inputs ───────────────────────────── */}
             <section className="panel">
               <h2 className="panel-title">Receita &amp; Despesas</h2>
 
@@ -369,6 +484,7 @@ export default function Home() {
                 value={renda}
                 onChange={(v) => setRenda(Number(v))}
               />
+
               <InputField
                 label="Gastos fixos (aluguel, contas…)"
                 type="number"
@@ -376,6 +492,7 @@ export default function Home() {
                 value={gastosFixos}
                 onChange={(v) => setGastosFixos(Number(v))}
               />
+
               <InputField
                 label="Gastos variáveis (mercado, saídas…)"
                 type="number"
@@ -383,6 +500,7 @@ export default function Home() {
                 value={gastosVariaveis}
                 onChange={(v) => setGastosVariaveis(Number(v))}
               />
+
               <InputField
                 label="% do saldo para investir"
                 type="number"
@@ -390,6 +508,7 @@ export default function Home() {
                 value={percentualInvestimento}
                 onChange={(v) => setPercentualInvestimento(Number(v))}
               />
+
               <InputField
                 label="Meta financeira (R$)"
                 type="number"
@@ -399,7 +518,6 @@ export default function Home() {
               />
             </section>
 
-            {/* ── Right column: detailed expenses + chart ───────── */}
             <div className="right-col">
               <section className="panel">
                 <h2 className="panel-title">Gastos detalhados</h2>
@@ -414,6 +532,7 @@ export default function Home() {
                       onChange={(e) => setNomeGasto(e.target.value)}
                       onKeyDown={onKeyDownGasto}
                     />
+
                     <input
                       className="inline-input inline-input--short"
                       type="number"
@@ -423,7 +542,10 @@ export default function Home() {
                       onKeyDown={onKeyDownGasto}
                     />
                   </div>
-                  <button className="btn-add" onClick={adicionarGasto}>+</button>
+
+                  <button className="btn-add" onClick={adicionarGasto}>
+                    +
+                  </button>
                 </div>
 
                 {gastos.length === 0 ? (
@@ -433,7 +555,9 @@ export default function Home() {
                     {gastos.map((gasto) => (
                       <li key={gasto.id} className="expense-item">
                         <span className="expense-name">{gasto.nome}</span>
-                        <span className="expense-value">{fmt(gasto.valor)}</span>
+                        <span className="expense-value">
+                          {fmt(gasto.valor)}
+                        </span>
                         <button
                           className="btn-remove"
                           onClick={() => removerGasto(gasto.id)}
@@ -443,6 +567,7 @@ export default function Home() {
                         </button>
                       </li>
                     ))}
+
                     <li className="expense-total">
                       <span>Total detalhado</span>
                       <span>{fmt(totalGastosDetalhados)}</span>
@@ -451,19 +576,36 @@ export default function Home() {
                 )}
               </section>
 
-              {/* Chart */}
               <section className="panel">
-                <h2 className="panel-title">Projeção 12 meses <span className="panel-badge">1% a.m.</span></h2>
+                <h2 className="panel-title">
+                  Projeção 12 meses{" "}
+                  <span className="panel-badge">1% a.m.</span>
+                </h2>
+
                 <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={dadosGrafico} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "var(--muted)" }} />
+                  <LineChart
+                    data={dadosGrafico}
+                    margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="var(--border)"
+                    />
+
+                    <XAxis
+                      dataKey="mes"
+                      tick={{ fontSize: 11, fill: "var(--muted)" }}
+                    />
+
                     <YAxis
                       tick={{ fontSize: 11, fill: "var(--muted)" }}
                       tickFormatter={(v) =>
-                        v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v
+                        Number(v) >= 1000
+                          ? `${(Number(v) / 1000).toFixed(0)}k`
+                          : String(v)
                       }
                     />
+
                     <Tooltip
                       contentStyle={{
                         background: "var(--surface)",
@@ -473,6 +615,7 @@ export default function Home() {
                       }}
                       formatter={(v) => fmt(Number(v))}
                     />
+
                     <Line
                       type="monotone"
                       dataKey="valor"
@@ -481,6 +624,7 @@ export default function Home() {
                       strokeWidth={2}
                       dot={false}
                     />
+
                     {meta > 0 && (
                       <Line
                         type="monotone"
@@ -680,7 +824,6 @@ const appStyles = `
     color: var(--text);
   }
 
-  /* Header */
   .app-header {
     display: flex;
     align-items: center;
@@ -718,9 +861,12 @@ const appStyles = `
     cursor: pointer;
     transition: all 0.15s;
   }
-  .btn-logout:hover { border-color: var(--accent-red); color: var(--accent-red); }
 
-  /* Main */
+  .btn-logout:hover {
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+  }
+
   .app-main {
     max-width: 1100px;
     margin: 0 auto;
@@ -730,7 +876,36 @@ const appStyles = `
     gap: 24px;
   }
 
-  /* Summary cards */
+  .month-panel {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .month-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .month-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    min-width: 180px;
+  }
+
+  .month-select:focus {
+    border-color: var(--accent-blue);
+  }
+
   .cards-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -757,28 +932,37 @@ const appStyles = `
   }
 
   .summary-card--green::before { background: var(--accent-green); }
-  .summary-card--red::before   { background: var(--accent-red); }
-  .summary-card--blue::before  { background: var(--accent-blue); }
+  .summary-card--red::before { background: var(--accent-red); }
+  .summary-card--blue::before { background: var(--accent-blue); }
   .summary-card--amber::before { background: var(--accent-amber); }
   .summary-card--purple::before { background: var(--accent-purple); }
 
-  .summary-label { font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: 0.03em; text-transform: uppercase; }
-  .summary-value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .summary-label {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
 
-  /* Two columns */
+  .summary-value {
+    font-size: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
   .two-col {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 24px;
   }
 
-  @media (max-width: 700px) {
-    .two-col { grid-template-columns: 1fr; }
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
   }
 
-  .right-col { display: flex; flex-direction: column; gap: 24px; }
-
-  /* Panel */
   .panel {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -807,9 +991,18 @@ const appStyles = `
     padding: 2px 8px;
   }
 
-  /* Input group (reused in app) */
-  .input-group { display: flex; flex-direction: column; gap: 6px; }
-  .input-group label { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .input-group label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+
   .input-group input {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -821,12 +1014,26 @@ const appStyles = `
     outline: none;
     transition: border-color 0.15s;
   }
-  .input-group input:focus { border-color: var(--accent-blue); }
-  .input-group input::placeholder { color: var(--muted); }
 
-  /* Expense form row */
-  .expense-row { display: flex; gap: 8px; align-items: flex-end; }
-  .expense-inputs { display: flex; gap: 8px; flex: 1; }
+  .input-group input:focus {
+    border-color: var(--accent-blue);
+  }
+
+  .input-group input::placeholder {
+    color: var(--muted);
+  }
+
+  .expense-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  .expense-inputs {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+  }
 
   .inline-input {
     background: var(--bg);
@@ -841,9 +1048,18 @@ const appStyles = `
     flex: 1;
     min-width: 0;
   }
-  .inline-input--short { max-width: 100px; }
-  .inline-input:focus { border-color: var(--accent-blue); }
-  .inline-input::placeholder { color: var(--muted); }
+
+  .inline-input--short {
+    max-width: 100px;
+  }
+
+  .inline-input:focus {
+    border-color: var(--accent-blue);
+  }
+
+  .inline-input::placeholder {
+    color: var(--muted);
+  }
 
   .btn-add {
     background: var(--accent-blue);
@@ -860,10 +1076,17 @@ const appStyles = `
     justify-content: center;
     transition: opacity 0.15s;
   }
-  .btn-add:hover { opacity: 0.85; }
 
-  /* Expense list */
-  .expense-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+  .btn-add:hover {
+    opacity: 0.85;
+  }
+
+  .expense-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
 
   .expense-item {
     display: flex;
@@ -873,10 +1096,27 @@ const appStyles = `
     border-radius: 8px;
     transition: background 0.1s;
   }
-  .expense-item:hover { background: var(--surface2); }
 
-  .expense-name { flex: 1; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .expense-value { font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .expense-item:hover {
+    background: var(--surface2);
+  }
+
+  .expense-name {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .expense-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
 
   .btn-remove {
     background: transparent;
@@ -889,7 +1129,10 @@ const appStyles = `
     transition: color 0.15s;
     flex-shrink: 0;
   }
-  .btn-remove:hover { color: var(--accent-red); }
+
+  .btn-remove:hover {
+    color: var(--accent-red);
+  }
 
   .expense-total {
     display: flex;
@@ -909,36 +1152,30 @@ const appStyles = `
     padding: 16px 0;
   }
 
- /* Mobile */
-  @media (max-width: 768px) {
-
+  @media (max-width: 700px) {
     .app-header {
       padding: 14px 16px;
-      flex-direction: column;
-      gap: 12px;
-      align-items: flex-start;
     }
 
-    .header-right {
-      width: 100%;
-      justify-content: space-between;
+    .header-title {
+      font-size: 16px;
     }
 
     .app-main {
-      padding: 20px 14px 40px;
-      gap: 18px;
+      padding: 24px 14px 48px;
     }
 
-    .cards-grid {
+    .two-col {
       grid-template-columns: 1fr;
     }
 
-    .summary-value {
-      font-size: 18px;
+    .month-panel {
+      flex-direction: column;
+      align-items: stretch;
     }
 
-    .panel {
-      padding: 18px;
+    .month-select {
+      width: 100%;
     }
 
     .expense-row {
@@ -956,18 +1193,6 @@ const appStyles = `
 
     .btn-add {
       width: 100%;
-      height: 42px;
-      font-size: 18px;
-    }
-
-    .panel-title {
-      font-size: 16px;
-      flex-wrap: wrap;
-    }
-
-    .header-title {
-      font-size: 16px;
     }
   }
-
- `;
+`;

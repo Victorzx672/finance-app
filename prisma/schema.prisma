@@ -7,32 +7,38 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  usuario   String   @unique
-  senha     String
-  criadoEm  DateTime @default(now())
+  id       Int      @id @default(autoincrement())
+  usuario  String   @unique
+  senha    String
+  criadoEm DateTime @default(now())
 
-  finances  FinanceData?
-  gastos    Expense[]
+  finances FinanceData[]
 }
 
 model FinanceData {
-  id                     Int     @id @default(autoincrement())
-  renda                  Float
-  gastosFixos            Float
-  gastosVariaveis        Float
-  percentualInvestimento Float
-  meta                   Float
-
-  userId Int  @unique
-  user   User @relation(fields: [userId], references: [id])
-}
-
-model Expense {
-  id     Int    @id @default(autoincrement())
-  nome   String
-  valor  Float
+  id                     Int      @id @default(autoincrement())
+  mesReferencia          String
+  renda                  Float    @default(0)
+  gastosFixos            Float    @default(0)
+  gastosVariaveis        Float    @default(0)
+  percentualInvestimento Float    @default(0)
+  meta                   Float    @default(0)
+  criadoEm               DateTime @default(now())
+  atualizadoEm           DateTime @updatedAt
 
   userId Int
   user   User @relation(fields: [userId], references: [id])
+
+  gastos Expense[]
+
+  @@unique([userId, mesReferencia])
+}
+
+model Expense {
+  id    Int    @id @default(autoincrement())
+  nome  String
+  valor Float
+
+  financeId Int
+  finance   FinanceData @relation(fields: [financeId], references: [id], onDelete: Cascade)
 }

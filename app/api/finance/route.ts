@@ -9,26 +9,46 @@ const prisma = new PrismaClient({ adapter });
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const userId = Number(searchParams.get("userId"));
 
-  if (!userId) {
-    return Response.json({ error: "userId obrigatório" }, { status: 400 });
+  const userId = Number(searchParams.get("userId"));
+  const mes = searchParams.get("mes");
+
+  if (!userId || !mes) {
+    return Response.json(
+      { error: "userId e mes são obrigatórios" },
+      { status: 400 }
+    );
   }
 
   const finance = await prisma.financeData.findUnique({
-    where: { userId },
+    where: {
+      userId_mesReferencia: {
+        userId,
+        mesReferencia: mes,
+      },
+    },
+    include: {
+      gastos: true,
+    },
   });
 
-  const gastos = await prisma.expense.findMany({
-    where: { userId },
-  });
+  if (!finance) {
+    return Response.json({
+      finance: null,
+      gastos: [],
+    });
+  }
 
-  return Response.json({ finance, gastos });
+  return Response.json({
+    finance,
+    gastos: finance.gastos,
+  });
 }
 
 export async function POST(req: Request) {
   const {
     userId,
+    mes,
     renda,
     gastosFixos,
     gastosVariaveis,
@@ -37,12 +57,21 @@ export async function POST(req: Request) {
     gastos,
   } = await req.json();
 
-  if (!userId) {
-    return Response.json({ error: "userId obrigatório" }, { status: 400 });
+  if (!userId || !mes) {
+    return Response.json(
+      { error: "userId e mes são obrigatórios" },
+      { status: 400 }
+    );
   }
 
   const finance = await prisma.financeData.upsert({
-    where: { userId },
+    where: {
+      userId_mesReferencia: {
+        userId,
+        mesReferencia: mes,
+      },
+    },
+
     update: {
       renda,
       gastosFixos,
@@ -50,8 +79,10 @@ export async function POST(req: Request) {
       percentualInvestimento,
       meta,
     },
+
     create: {
       userId,
+      mesReferencia: mes,
       renda,
       gastosFixos,
       gastosVariaveis,
@@ -61,16 +92,25 @@ export async function POST(req: Request) {
   });
 
   await prisma.expense.deleteMany({
-    where: { userId },
+    where: {
+      financeId: finance.id,
+    },
   });
 
-  await prisma.expense.createMany({
-    data: gastos.map((gasto: { nome: string; valor: number }) => ({
-      nome: gasto.nome,
-      valor: gasto.valor,
-      userId,
-    })),
-  });
+  if (gastos?.length > 0) {
+    await prisma.expense.createMany({
+      data: gastos.map(
+        (gasto: { nome: string; valor: number }) => ({
+          nome: gasto.nome,
+          valor: gasto.valor,
+          financeId: finance.id,
+        })
+      ),
+    });
+  }
 
-  return Response.json({ success: true, finance });
+  return Response.json({
+    success: true,
+    finance,
+  });
 }
