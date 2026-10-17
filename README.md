@@ -5,7 +5,7 @@ Controle financeiro pessoal. Next.js + Prisma (PostgreSQL) + NextAuth.
 ## O que faz
 
 **Este mês**
-- Várias **fontes de renda** (o total é calculado), gastos variáveis e % a investir. Tudo é salvo automaticamente.
+- Várias **fontes de renda** (o total é calculado), gastos variáveis e % a investir. O mês é salvo **manualmente**: clique em **Salvar** (ou Ctrl+S). Enquanto houver alterações não salvas aparece um aviso no topo e uma barra fixa embaixo, e o app pergunta antes de sair, trocar de mês ou fechar/recarregar a página. Parcelas, contas fixas, metas, pagamentos e preferências são gravados na hora.
 - **Contas fixas** que se repetem todo mês (aluguel, internet...), com dia de vencimento e marcação de "paga". Mudar o valor vale do mês escolhido em diante e não altera o passado. Contas atrasadas ou perto de vencer aparecem num aviso.
 - **Cartão (Nubank):** compras à vista e **parceladas** (aparecem nos meses certos, ex.: 4/10, inclusive as já em andamento), limite usado, fechamento e vencimento da fatura.
 - **Outros gastos**, com categoria, data da compra e edição de cada item; **busca** por nome e categoria.

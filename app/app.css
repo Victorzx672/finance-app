@@ -977,3 +977,70 @@ button { -webkit-user-select: none; user-select: none; }
 
   .toast { bottom: calc(12px + env(safe-area-inset-bottom)); }
 }
+
+/* ══ Salvamento manual ═════════════════════════════════════ */
+
+/* indicador no cabeçalho: amarelo piscando enquanto houver alterações não salvas */
+.save-status.nao-salvo .save-dot { background: var(--amber); animation: pulse 1.2s ease-in-out infinite; }
+.save-status.nao-salvo .save-text { color: var(--amber); font-weight: 700; }
+
+/* barra fixa embaixo: impossível esquecer que falta salvar */
+.barra-salvar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 10px 12px 10px 18px;
+  background: var(--amber-soft);
+  color: var(--amber-text);
+  border: 1px solid var(--amber-border);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+  font-size: 15px;
+}
+
+.barra-salvar .btn { height: 38px; }
+
+/* deixa espaço no fim da página para a barra não cobrir o conteúdo */
+.app-main.com-barra { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+
+/* o aviso rápido sobe quando a barra está visível */
+.barra-salvar ~ .toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
+
+/* confirmação ao sair / trocar de mês com alterações */
+.modal-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(10, 16, 30, 0.55);
+}
+
+.modal {
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+
+.modal h2 { font-size: 20px; margin-bottom: 8px; }
+.modal p { color: var(--muted); line-height: 1.5; margin-bottom: 20px; }
+.modal p strong { color: var(--text); }
+.modal-acoes { display: flex; flex-direction: column; gap: 10px; }
+
+@media (max-width: 760px) {
+  .barra-salvar { left: 12px; right: 12px; transform: none; width: auto; max-width: none; justify-content: space-between; bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .barra-salvar ~ .toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}

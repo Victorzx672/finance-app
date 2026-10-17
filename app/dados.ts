@@ -38,7 +38,7 @@ interface ParcelaApi {
   total: number;
 }
 
-/** Devolve null se a leitura falhar (para o autosave não gravar zeros por cima). */
+/** Devolve null se a leitura falhar (para o salvamento não gravar zeros por cima). */
 export async function buscarFinanca(mes: string): Promise<FinancaDoMes | null> {
   try {
     const res = await fetch(`/api/finance?mes=${mes}`);

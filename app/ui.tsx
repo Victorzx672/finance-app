@@ -16,7 +16,7 @@ export interface Gasto {
   categoria?: string | null;
   /** dia do mês da compra (1 a 31), opcional */
   dia?: number | null;
-  /** Presente quando o item é uma parcela de compra parcelada (não vai no autosave). */
+  /** Presente quando o item é uma parcela de compra parcelada (não entra no salvamento do mês). */
   parcela?: { numero: number; total: number; parcelamentoId: number };
 }
 

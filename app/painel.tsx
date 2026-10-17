@@ -14,6 +14,7 @@ import { FILTRO_VAZIO, type FiltroGastos } from "@/lib/filtro";
 import { chaveMes, faixaDeAnos, labelMes } from "@/lib/meses";
 import { faltaParaMeta, metaPrincipal, progressoMeta, type MetaDinheiro } from "@/lib/metas";
 import { somarMes } from "@/lib/parcelas";
+import { serializarMes } from "@/lib/payload-mes";
 import { diasAteVencimento, pedeAtencao, situacaoConta } from "@/lib/vencimentos";
 import { AvisoLimite } from "./aviso-limite";
 import { AvisoVencimentos, type ItemVencimento } from "./aviso-vencimentos";
@@ -142,8 +143,11 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const [pagos, setPagos] = useState<string[]>([]);
   const [mesSelecionado, setMesSelecionado] = useState(MES_ATUAL);
   const [mesCarregado, setMesCarregado] = useState<string | null>(null);
-  // O mês aberto já existe no servidor? (visitar um mês vazio não deve criá-lo)
-  const [mesExiste, setMesExiste] = useState(false);
+  // Conteúdo do mês como estava no último salvamento (ou ao abrir). Diferente do
+  // conteúdo atual = há alterações não salvas.
+  const [salvoJson, setSalvoJson] = useState<string | null>(null);
+  // Ação adiada porque há alterações não salvas (sair, trocar de mês...)
+  const [pendente, setPendente] = useState<{ rotulo: string; acao: () => void } | null>(null);
 
   // Dados gerais
   const [historico, setHistorico] = useState<HistoricoMes[]>([]);
@@ -170,7 +174,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const renda = somar(rendas);
   const totalContas = somar(contas);
 
-  // Parcelas vêm da API (não entram no autosave) e se juntam aos gastos do mês
+  // Parcelas vêm da API (não entram no salvamento do mês) e se juntam aos gastos do mês
   const todosGastos = [...gastos, ...parcelas];
   const gastosAvulsos = todosGastos.filter((g) => !g.cartao);
   const gastosNubank = todosGastos.filter((g) => g.cartao === CARTAO);
@@ -222,6 +226,17 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
   // Só salva depois que os dados do mês selecionado foram lidos do servidor
   const carregado = mesCarregado === mesSelecionado;
+
+  // Alterações não salvas: o que está na tela difere do último salvamento
+  const payloadJson = serializarMes({
+    mes: mesSelecionado,
+    rendas,
+    gastosFixos,
+    gastosVariaveis,
+    percentualInvestimento,
+    gastos,
+  });
+  const alterado = carregado && salvoJson !== null && payloadJson !== salvoJson;
 
   // Mês sem nada preenchido: oferece copiar do mês anterior
   const mesVazio =
@@ -291,16 +306,32 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     let cancelado = false;
 
     buscarFinanca(mesSelecionado).then((dados) => {
-      // Se falhar, "carregado" continua falso: o autosave não pode sobrescrever
-      // dados reais com zeros quando a leitura falha.
+      // Se falhar, "carregado" continua falso: sem leitura não dá para salvar, e
+      // assim nunca se grava zero por cima de dados reais.
       if (cancelado || !dados) return;
 
-      setRendas(dados.rendas.length > 0 ? dados.rendas : [novaFonte()]);
-      setGastosFixos(dados.finance?.gastosFixos ?? 0);
-      setGastosVariaveis(dados.finance?.gastosVariaveis ?? 0);
-      setPercentualInvestimento(dados.finance?.percentualInvestimento ?? 0);
+      const rendasCarregadas = dados.rendas.length > 0 ? dados.rendas : [novaFonte()];
+      const fixos = dados.finance?.gastosFixos ?? 0;
+      const variaveis = dados.finance?.gastosVariaveis ?? 0;
+      const percentual = dados.finance?.percentualInvestimento ?? 0;
+
+      setRendas(rendasCarregadas);
+      setGastosFixos(fixos);
+      setGastosVariaveis(variaveis);
+      setPercentualInvestimento(percentual);
       setGastos(dados.gastos);
-      setMesExiste(dados.finance !== null);
+
+      // O que veio do servidor é o ponto de partida: ainda não há nada a salvar
+      setSalvoJson(
+        serializarMes({
+          mes: mesSelecionado,
+          rendas: rendasCarregadas,
+          gastosFixos: fixos,
+          gastosVariaveis: variaveis,
+          percentualInvestimento: percentual,
+          gastos: dados.gastos,
+        })
+      );
       setMesCarregado(mesSelecionado);
     });
 
@@ -334,66 +365,103 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     gravarArmazenado("fluxopay-tema", escuro ? "escuro" : "claro");
   }, [escuro]);
 
-  // ── Autosave ────────────────────────────────────────────────────────────────
+  // ── Ações ───────────────────────────────────────────────────────────────────
 
+  const mostrarAviso = (tipo: "ok" | "error", texto: string, duracaoMs = 6000) => {
+    setAviso({ tipo, texto });
+    setTimeout(() => setAviso(null), duracaoMs);
+  };
+
+  // ── Salvar (manual) ─────────────────────────────────────────────────────────
+  // Nada é gravado sozinho: o mês só vai para o servidor quando o usuário clica em
+  // "Salvar" (ou aperta Ctrl+S). Parcelas, contas fixas, metas e pagamentos são
+  // ações próprias (têm seus botões) e continuam valendo na hora.
+
+  const salvar = async () => {
+    if (!carregado || salvando) return false;
+
+    setSalvando(true);
+    const enviado = payloadJson;
+
+    try {
+      const res = await fetch("/api/finance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: enviado,
+      });
+
+      if (!res.ok) {
+        mostrarAviso("error", "Não foi possível salvar. Suas alterações continuam aqui; tente de novo.");
+        return false;
+      }
+
+      // Se o usuário continuou digitando durante o envio, o que sobrou ainda conta como alteração
+      setSalvoJson(enviado);
+      await carregarHistorico();
+      mostrarAviso("ok", "Alterações salvas.", 2500);
+      return true;
+    } catch {
+      mostrarAviso("error", "Sem conexão. Suas alterações continuam aqui; tente salvar de novo.");
+      return false;
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // Fechar a aba, recarregar ou voltar com alterações não salvas: o navegador avisa
   useEffect(() => {
-    if (!carregado) return;
+    if (!alterado) return;
 
-    // Mês que ainda não existe e continua em branco: não cria um registro vazio
-    const emBranco =
-      rendas.every((r) => r.valor === 0) &&
-      gastosFixos === 0 &&
-      gastosVariaveis === 0 &&
-      percentualInvestimento === 0 &&
-      gastos.length === 0;
+    const avisar = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
 
-    if (!mesExiste && emBranco) return;
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [alterado]);
 
-    const salvar = async () => {
-      setSalvando(true);
-
-      try {
-        const res = await fetch("/api/finance", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mes: mesSelecionado,
-            // linhas em branco ficam de fora; sem nome, vira "Renda"
-            rendas: rendas
-              .filter((r) => r.valor > 0)
-              .map((r) => ({ nome: r.nome.trim() || "Renda", valor: r.valor })),
-            gastosFixos,
-            gastosVariaveis,
-            percentualInvestimento,
-            // parcelas e contas fixas ficam de fora: vivem em rotas próprias
-            gastos: gastos.map(({ nome, valor, cartao, categoria, dia }) => ({
-              nome,
-              valor,
-              cartao: cartao ?? null,
-              categoria: categoria ?? null,
-              dia: dia ?? null,
-            })),
-          }),
-        });
-
-        if (res.ok) {
-          setMesExiste(true);
-          await carregarHistorico();
-        }
-      } finally {
-        setSalvando(false);
+  // Ctrl+S (ou Cmd+S) salva
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (alterado) salvar();
       }
     };
 
-    const debounce = setTimeout(salvar, 800);
-    return () => clearTimeout(debounce);
-  }, [rendas, gastosFixos, gastosVariaveis, percentualInvestimento, gastos, carregado, mesExiste, mesSelecionado]);
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  });
 
-  // ── Ações ───────────────────────────────────────────────────────────────────
+  /** Executa a ação já, ou pergunta antes se há alterações não salvas. */
+  const protegerSaida = (rotulo: string, acao: () => void) => {
+    if (alterado) setPendente({ rotulo, acao });
+    else acao();
+  };
 
-  const mostrarAviso = (tipo: "ok" | "error", texto: string) => {
-    setAviso({ tipo, texto });
-    setTimeout(() => setAviso(null), 6000);
+  const mudarMes = (novo: string) => {
+    if (novo !== mesSelecionado) protegerSaida("trocar de mês", () => setMesSelecionado(novo));
+  };
+
+  const pedirSaida = () => protegerSaida("sair", onSair);
+
+  const salvarEContinuar = async () => {
+    if (!pendente) return;
+
+    if (await salvar()) {
+      const { acao } = pendente;
+      setPendente(null);
+      acao();
+    }
+  };
+
+  const continuarSemSalvar = () => {
+    if (!pendente) return;
+
+    const { acao } = pendente;
+    setPendente(null);
+    acao();
   };
 
   const alternarOcultar = () => {
@@ -597,9 +665,11 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
         </div>
 
         <div className="header-right">
-          <span className={`save-status ${salvando ? "saving" : ""}`}>
+          <span className={`save-status ${salvando ? "saving" : alterado ? "nao-salvo" : ""}`}>
             <span className="save-dot" />
-            <span className="save-text">{salvando ? "Salvando..." : "Salvo automaticamente"}</span>
+            <span className="save-text">
+              {salvando ? "Salvando..." : alterado ? "Alterações não salvas" : "Tudo salvo"}
+            </span>
           </span>
 
           {nomeUsuario && <span className="header-user">Olá, {nomeUsuario}</span>}
@@ -638,7 +708,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
             </Icon>
           </BotaoIcone>
 
-          <button className="btn btn-outline" onClick={onSair}>
+          <button className="btn btn-outline" onClick={pedirSaida}>
             Sair
           </button>
         </div>
@@ -650,7 +720,48 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
         </div>
       )}
 
-      <main className="app-main">
+      {alterado && (
+        <div className="barra-salvar" role="status">
+          <span>
+            Você tem alterações <strong>não salvas</strong>.
+          </span>
+          <button className="btn btn-primary btn-sm" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      )}
+
+      {pendente && (
+        <div className="modal-fundo" role="presentation" onClick={() => setPendente(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-titulo">Salvar antes de {pendente.rotulo}?</h2>
+            <p>
+              Você alterou os dados de <strong>{labelMes(mesSelecionado)}</strong> e ainda não salvou. Se continuar
+              sem salvar, essas alterações serão perdidas.
+            </p>
+
+            <div className="modal-acoes">
+              <button className="btn btn-primary" onClick={salvarEContinuar} disabled={salvando}>
+                {salvando ? "Salvando..." : "Salvar e continuar"}
+              </button>
+              <button className="btn btn-outline" onClick={continuarSemSalvar} disabled={salvando}>
+                Continuar sem salvar
+              </button>
+              <button className="link-btn center" onClick={() => setPendente(null)}>
+                Voltar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <main className={`app-main ${alterado ? "com-barra" : ""}`}>
         <nav className="abas" role="tablist" aria-label="Seções">
           {ABAS.map((a) => (
             <button
@@ -690,7 +801,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
           <>
             <div className="page-intro">
               <h1>Seu mês em um só lugar</h1>
-              <p>Preencha os valores abaixo. O resumo se atualiza sozinho e tudo é salvo.</p>
+              <p>
+                Preencha os valores abaixo. O resumo se atualiza sozinho. Quando terminar, clique em{" "}
+                <strong>Salvar</strong> (ou aperte Ctrl+S).
+              </p>
             </div>
 
             <section className="card month-bar">
@@ -700,7 +814,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                 mesesComDados={mesesComDados}
                 anoMin={faixaAnos.min}
                 anoMax={faixaAnos.max}
-                onChange={setMesSelecionado}
+                onChange={mudarMes}
               />
 
               <div className="spend">
@@ -1012,7 +1126,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                       <button
                         key={item.id}
                         className={`history-item ${item.mesReferencia === mesSelecionado ? "active" : ""}`}
-                        onClick={() => setMesSelecionado(item.mesReferencia)}
+                        onClick={() => mudarMes(item.mesReferencia)}
                       >
                         <span className="history-month">{labelMes(item.mesReferencia)}</span>
 
