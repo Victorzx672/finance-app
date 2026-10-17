@@ -6,13 +6,60 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id       Int      @id @default(autoincrement())
-  usuario  String   @unique
-  senha    String
-  criadoEm DateTime @default(now())
+enum TipoToken {
+  VERIFICACAO
+  RECUPERACAO
+}
 
-  finances FinanceData[]
+model User {
+  id              Int       @id @default(autoincrement())
+  usuario         String    @unique
+  email           String    @unique
+  emailVerificado DateTime?
+  senha           String
+  criadoEm        DateTime  @default(now())
+
+  /// Avisa por e-mail quando os gastos do mês passam do limite (uma vez por mês).
+  alertaEmail Boolean @default(true)
+  /// Limite de gasto por categoria: { "Lazer": 300 }
+  orcamentos  Json    @default("{}")
+  /// Dados dos cartões: { "Nubank": { "limite": 5000, "fechamento": 25, "vencimento": 5 } }
+  cartoes     Json    @default("{}")
+
+  finances      FinanceData[]
+  tokens        TokenEmail[]
+  parcelamentos Parcelamento[]
+  contasFixas   ContaFixa[]
+  pagamentos    Pagamento[]
+  metas         Meta[]
+}
+
+/// Compra parcelada. Aparece nos meses de mesInicio até mesInicio + totalParcelas - 1.
+model Parcelamento {
+  id            Int      @id @default(autoincrement())
+  nome          String
+  valorParcela  Float
+  totalParcelas Int
+  mesInicio     String // "AAAA-MM" da 1ª parcela
+  cartao        String?
+  categoria     String?
+  criadoEm      DateTime @default(now())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model TokenEmail {
+  id        Int       @id @default(autoincrement())
+  tipo      TipoToken
+  tokenHash String    @unique
+  expiraEm  DateTime
+  criadoEm  DateTime  @default(now())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model FinanceData {
@@ -25,20 +72,84 @@ model FinanceData {
   meta                   Float    @default(0)
   criadoEm               DateTime @default(now())
   atualizadoEm           DateTime @updatedAt
+  /// Já enviamos o alerta de "passou do limite" neste mês?
+  alertaEnviado          Boolean  @default(false)
 
   userId Int
   user   User @relation(fields: [userId], references: [id])
 
   gastos Expense[]
+  rendas FonteRenda[]
 
   @@unique([userId, mesReferencia])
 }
 
 model Expense {
+  id        Int     @id @default(autoincrement())
+  nome      String
+  valor     Float
+  cartao    String? // nulo = gasto avulso; senão, o nome do cartão (ver lib/cartoes.ts)
+  categoria String? // ver lib/categorias.ts; nulo = sem categoria
+  dia       Int? // dia do mês em que a compra foi feita (1 a 31), opcional
+
+  financeId Int
+  finance   FinanceData @relation(fields: [financeId], references: [id], onDelete: Cascade)
+}
+
+/// Fonte de renda do mês (salário, extra...). A soma vira FinanceData.renda.
+model FonteRenda {
   id    Int    @id @default(autoincrement())
   nome  String
   valor Float
 
   financeId Int
   finance   FinanceData @relation(fields: [financeId], references: [id], onDelete: Cascade)
+
+  @@index([financeId])
+}
+
+/// Conta fixa que se repete todo mês (aluguel, internet...). Vale de mesInicio até mesFim
+/// (sem mesFim = continua). Mudar valor/dia cria uma nova versão a partir do mês escolhido,
+/// para não alterar o histórico.
+model ContaFixa {
+  id        Int     @id @default(autoincrement())
+  nome      String
+  valor     Float
+  dia       Int // dia do vencimento (1 a 31)
+  categoria String?
+  mesInicio String // "AAAA-MM"
+  mesFim    String? // "AAAA-MM", nulo = sem fim
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Marca uma conta (ou a fatura do cartão) como paga em um mês.
+/// chave: "conta:<id>" ou "fatura:<cartão>".
+model Pagamento {
+  id    Int    @id @default(autoincrement())
+  chave String
+  mes   String // "AAAA-MM"
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chave, mes])
+}
+
+/// Meta de dinheiro a juntar (viagem, reserva de emergência...).
+model Meta {
+  id       Int      @id @default(autoincrement())
+  nome     String
+  alvo     Float
+  guardado Float    @default(0)
+  reserva  Boolean  @default(false) // conta como reserva de emergência
+  criadoEm DateTime @default(now())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

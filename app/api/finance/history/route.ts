@@ -1,33 +1,25 @@
 import { prisma } from "@/lib/prisma";
 import { getUserIdFromSession } from "@/lib/auth";
+import { naoAutorizado } from "@/lib/api";
+import { resumoDoMes } from "@/lib/resumo-mes";
 
+/** Resumo de cada mês salvo (mais recente primeiro), com a mesma conta da tela. */
 export async function GET() {
   const userId = await getUserIdFromSession();
+  if (!userId) return naoAutorizado();
 
-  if (!userId) {
-    return Response.json({ error: "Não autorizado" }, { status: 401 });
-  }
-
-  const meses = await prisma.financeData.findMany({
-    where: { userId },
-    include: {
-      gastos: true,
-    },
-    orderBy: {
-      mesReferencia: "desc",
-    },
-  });
+  const [meses, parcelamentos, contas] = await Promise.all([
+    prisma.financeData.findMany({
+      where: { userId },
+      include: { gastos: true },
+      orderBy: { mesReferencia: "desc" },
+    }),
+    prisma.parcelamento.findMany({ where: { userId } }),
+    prisma.contaFixa.findMany({ where: { userId } }),
+  ]);
 
   const historico = meses.map((mes) => {
-    const totalGastosDetalhados = mes.gastos.reduce(
-      (acc, gasto) => acc + gasto.valor,
-      0
-    );
-
-    const totalGastos =
-      mes.gastosFixos + mes.gastosVariaveis + totalGastosDetalhados;
-
-    const saldo = mes.renda - totalGastos;
+    const { saldo, totalGastos } = resumoDoMes(mes, parcelamentos, contas);
 
     return {
       id: mes.id,
