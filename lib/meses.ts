@@ -1,5 +1,3 @@
-import { somarMes } from "@/lib/parcelas";
-
 export const chaveMes = (data: Date) =>
   `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
 
@@ -21,15 +19,24 @@ export const labelCurto = (chave: string) =>
     .replace(/\.?\s*de\s*/, "/")
     .replace(".", "");
 
-export const MESES_ATRAS = 36;
-export const MESES_ADIANTE = 12;
+// ─── Seletor de mês e ano ─────────────────────────────────────────────────────
 
-/** Opções do seletor de mês: de MESES_ATRAS atrás até MESES_ADIANTE à frente. */
-export function listaMeses(base = new Date()) {
-  const atual = chaveMes(base);
+export const MESES_CURTOS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
-  return Array.from({ length: MESES_ATRAS + MESES_ADIANTE + 1 }, (_, i) => {
-    const chave = somarMes(atual, i - MESES_ATRAS);
-    return { value: chave, label: labelMes(chave) };
-  });
+/** "2026-10" -> 2026 */
+export const anoDe = (chave: string) => Number(chave.slice(0, 4));
+
+/** "2026-10" -> 10 (de 1 a 12) */
+export const numeroDoMes = (chave: string) => Number(chave.slice(5, 7));
+
+/** (2026, 10) -> "2026-10" */
+export const montarMes = (ano: number, mes: number) => `${ano}-${String(mes).padStart(2, "0")}`;
+
+/** Anos que o seletor oferece: 5 para trás e 2 para frente (e antes disso, se houver dados). */
+export function faixaDeAnos(anoAtual: number, mesesComDados: Iterable<string> = []) {
+  let min = anoAtual - 5;
+
+  for (const m of mesesComDados) min = Math.min(min, anoDe(m));
+
+  return { min, max: anoAtual + 2 };
 }

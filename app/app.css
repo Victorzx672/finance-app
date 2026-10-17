@@ -518,7 +518,7 @@ ul { list-style: none; }
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 10px;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .select-categoria:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 3px var(--blue-soft); }
@@ -881,4 +881,99 @@ ul { list-style: none; }
   .btn-topo { width: 34px; height: 34px; }
   .app-header .btn-outline { padding: 0 12px; }
   .aba { padding: 0 12px; }
+}
+
+/* ══ Seletor de mês e ano ══════════════════════════════════ */
+
+.month-bar { flex-wrap: wrap; }
+
+.seletor-mes { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.seletor-topo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.seletor-ano { display: flex; align-items: center; gap: 6px; }
+.seletor-ano-valor { min-width: 58px; text-align: center; font-size: 20px; font-variant-numeric: tabular-nums; }
+.seletor-titulo { color: var(--muted); font-weight: 600; }
+
+.seletor-meses { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+
+.mes-chip {
+  position: relative;
+  height: 42px;
+  padding: 0 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.mes-chip:hover { background: var(--surface2); }
+.mes-chip--hoje { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.mes-chip--ativo,
+.mes-chip--ativo:hover { background: var(--blue-btn); border-color: var(--blue-btn); color: #fff; }
+
+/* pontinho: este mês já tem dados salvos */
+.mes-ponto { position: absolute; bottom: 5px; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--green); }
+.mes-chip--ativo .mes-ponto { background: #fff; }
+
+@media (max-width: 380px) {
+  .seletor-meses { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (max-width: 760px) {
+  /* em coluna, o "flex: 1 1 380px" viraria altura: deixa o tamanho natural */
+  .seletor-mes { flex: 0 0 auto; }
+}
+
+/* ══ iPhone e app instalado ════════════════════════════════ */
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* toque direto, sem esperar o duplo toque de zoom */
+button, a, select, label, input[type="checkbox"], .aba, .mes-chip { touch-action: manipulation; }
+button { -webkit-user-select: none; user-select: none; }
+
+/* áreas seguras: entalhe, barra inferior e laterais (modo paisagem) */
+.app-header {
+  height: calc(60px + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+}
+
+.app-main {
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+}
+
+.auth-bg {
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
+
+@media (max-width: 760px) {
+  /* o iOS dá zoom em qualquer campo com fonte menor que 16px */
+  input, select, textarea { font-size: 16px; }
+
+  .app-header {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+
+  .app-main {
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: calc(48px + env(safe-area-inset-bottom));
+  }
+
+  .toast { bottom: calc(12px + env(safe-area-inset-bottom)); }
 }

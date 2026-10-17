@@ -11,7 +11,7 @@ import {
   type StatusLimite,
 } from "@/lib/calculos";
 import { FILTRO_VAZIO, type FiltroGastos } from "@/lib/filtro";
-import { chaveMes, labelMes, listaMeses } from "@/lib/meses";
+import { chaveMes, faixaDeAnos, labelMes } from "@/lib/meses";
 import { faltaParaMeta, metaPrincipal, progressoMeta, type MetaDinheiro } from "@/lib/metas";
 import { somarMes } from "@/lib/parcelas";
 import { diasAteVencimento, pedeAtencao, situacaoConta } from "@/lib/vencimentos";
@@ -41,6 +41,7 @@ import { ListaGastos, SelectCategoria, type EdicaoGasto } from "./lista-gastos";
 import { PainelMetas, type DadosMeta } from "./metas";
 import { PainelPreferencias } from "./preferencias";
 import { PainelAno } from "./resumo-ano";
+import { SeletorMes } from "./seletor-mes";
 import { Icon, InputField, LogoIcon, fmt, numero, type Gasto } from "./ui";
 
 /** Cor da barra de gastos conforme a situação do limite. */
@@ -60,7 +61,6 @@ const ABAS = [
 
 type Aba = (typeof ABAS)[number]["id"];
 
-const MESES = listaMeses();
 const MES_ATUAL = chaveMes(new Date());
 const ANO_ATUAL = new Date().getFullYear();
 const CARTAO = "Nubank";
@@ -142,6 +142,8 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const [pagos, setPagos] = useState<string[]>([]);
   const [mesSelecionado, setMesSelecionado] = useState(MES_ATUAL);
   const [mesCarregado, setMesCarregado] = useState<string | null>(null);
+  // O mês aberto já existe no servidor? (visitar um mês vazio não deve criá-lo)
+  const [mesExiste, setMesExiste] = useState(false);
 
   // Dados gerais
   const [historico, setHistorico] = useState<HistoricoMes[]>([]);
@@ -214,7 +216,9 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
         .sort((a, b) => a.dias - b.dias)
     : [];
 
-  const indiceMes = MESES.findIndex((m) => m.value === mesSelecionado);
+  // Seletor de mês: quais meses já têm dados e até onde vai a escolha de ano
+  const mesesComDados = new Set(historico.map((h) => h.mesReferencia));
+  const faixaAnos = faixaDeAnos(ANO_ATUAL, mesesComDados);
 
   // Só salva depois que os dados do mês selecionado foram lidos do servidor
   const carregado = mesCarregado === mesSelecionado;
@@ -296,6 +300,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       setGastosVariaveis(dados.finance?.gastosVariaveis ?? 0);
       setPercentualInvestimento(dados.finance?.percentualInvestimento ?? 0);
       setGastos(dados.gastos);
+      setMesExiste(dados.finance !== null);
       setMesCarregado(mesSelecionado);
     });
 
@@ -334,6 +339,16 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   useEffect(() => {
     if (!carregado) return;
 
+    // Mês que ainda não existe e continua em branco: não cria um registro vazio
+    const emBranco =
+      rendas.every((r) => r.valor === 0) &&
+      gastosFixos === 0 &&
+      gastosVariaveis === 0 &&
+      percentualInvestimento === 0 &&
+      gastos.length === 0;
+
+    if (!mesExiste && emBranco) return;
+
     const salvar = async () => {
       setSalvando(true);
 
@@ -361,7 +376,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
           }),
         });
 
-        if (res.ok) await carregarHistorico();
+        if (res.ok) {
+          setMesExiste(true);
+          await carregarHistorico();
+        }
       } finally {
         setSalvando(false);
       }
@@ -369,7 +387,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
     const debounce = setTimeout(salvar, 800);
     return () => clearTimeout(debounce);
-  }, [rendas, gastosFixos, gastosVariaveis, percentualInvestimento, gastos, carregado, mesSelecionado]);
+  }, [rendas, gastosFixos, gastosVariaveis, percentualInvestimento, gastos, carregado, mesExiste, mesSelecionado]);
 
   // ── Ações ───────────────────────────────────────────────────────────────────
 
@@ -564,11 +582,6 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     }
   };
 
-  const irParaMes = (delta: number) => {
-    const destino = MESES[indiceMes + delta];
-    if (destino) setMesSelecionado(destino.value);
-  };
-
   // ──────────────────────────────────────────────────────────────────────────
 
   const tituloMeta = principal?.nome ?? "";
@@ -681,40 +694,14 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
             </div>
 
             <section className="card month-bar">
-              <div className="month-picker">
-                <span className="month-label">Mês</span>
-
-                <button
-                  className="month-btn"
-                  onClick={() => irParaMes(-1)}
-                  disabled={indiceMes <= 0}
-                  aria-label="Mês anterior"
-                >
-                  ‹
-                </button>
-
-                <select
-                  className="month-select"
-                  value={mesSelecionado}
-                  onChange={(e) => setMesSelecionado(e.target.value)}
-                  aria-label="Mês"
-                >
-                  {MESES.map((mes) => (
-                    <option key={mes.value} value={mes.value}>
-                      {mes.label}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  className="month-btn"
-                  onClick={() => irParaMes(1)}
-                  disabled={indiceMes < 0 || indiceMes >= MESES.length - 1}
-                  aria-label="Próximo mês"
-                >
-                  ›
-                </button>
-              </div>
+              <SeletorMes
+                mes={mesSelecionado}
+                mesAtual={MES_ATUAL}
+                mesesComDados={mesesComDados}
+                anoMin={faixaAnos.min}
+                anoMax={faixaAnos.max}
+                onChange={setMesSelecionado}
+              />
 
               <div className="spend">
                 <div className="spend-head">

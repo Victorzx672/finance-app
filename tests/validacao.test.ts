@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { cartaoValido } from "@/lib/cartoes";
 import { categoriaValida } from "@/lib/categorias";
-import { chaveMes, labelCurto, labelMes, listaMeses, MESES_ADIANTE, MESES_ATRAS } from "@/lib/meses";
+import {
+  MESES_CURTOS,
+  anoDe,
+  chaveMes,
+  faixaDeAnos,
+  labelCurto,
+  labelMes,
+  montarMes,
+  numeroDoMes,
+} from "@/lib/meses";
 import { emailValido, normalizarEmail, senhaValida, usuarioValido } from "@/lib/validacao";
 
 describe("usuário, e-mail e senha", () => {
@@ -47,13 +56,19 @@ describe("meses", () => {
     expect(labelCurto("2026-10")).toBe("out/26");
   });
 
-  it("a lista de meses inclui o atual, com o intervalo esperado", () => {
-    const base = new Date(2026, 9, 17);
-    const lista = listaMeses(base);
+  it("separa e monta ano e mês", () => {
+    expect(anoDe("2026-10")).toBe(2026);
+    expect(numeroDoMes("2026-10")).toBe(10);
+    expect(numeroDoMes("2026-03")).toBe(3);
+    expect(montarMes(2026, 3)).toBe("2026-03");
+    expect(montarMes(2027, 12)).toBe("2027-12");
+    expect(chaveMes(new Date(2026, 9, 17))).toBe("2026-10");
+    expect(MESES_CURTOS).toHaveLength(12);
+  });
 
-    expect(lista).toHaveLength(MESES_ATRAS + MESES_ADIANTE + 1);
-    expect(lista[0].value).toBe("2023-10");
-    expect(lista[MESES_ATRAS].value).toBe(chaveMes(base));
-    expect(lista[lista.length - 1].value).toBe("2027-10");
+  it("a faixa de anos vai de 5 atrás a 2 à frente, e cresce para trás se houver dados antigos", () => {
+    expect(faixaDeAnos(2026)).toEqual({ min: 2021, max: 2028 });
+    expect(faixaDeAnos(2026, ["2025-04", "2026-01"])).toEqual({ min: 2021, max: 2028 });
+    expect(faixaDeAnos(2026, ["2018-11"])).toEqual({ min: 2018, max: 2028 });
   });
 });

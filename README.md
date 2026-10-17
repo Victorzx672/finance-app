@@ -62,6 +62,16 @@ Sem `SMTP_HOST`, em desenvolvimento o e-mail (com o link) é mostrado no termina
 - Defina na hospedagem as mesmas variáveis do `.env` (banco, `NEXTAUTH_SECRET` e SMTP).
 - Aplique as migrações no banco de produção com `npx prisma migrate deploy`. Se o banco já tiver usuários antigos (sem e-mail), a migração `email_e_tokens` precisa de ajuste, porque a coluna `email` é obrigatória.
 
+## Instalar no iPhone
+
+O app precisa estar publicado em um endereço `https://` (ex.: o da Vercel). Depois:
+
+1. Abra o endereço no **Safari** (tem de ser o Safari, não o Chrome).
+2. Toque no botão de compartilhar (quadrado com a seta para cima) e escolha **Adicionar à Tela de Início**.
+3. O ícone azul do FluxoPay aparece na tela. Ele abre em tela cheia, sem a barra do Safari.
+
+Observações: o app instalado tem login próprio (separado do Safari), então entre de novo nele; e é preciso internet para usar. O tema escuro e o "ocultar valores" ficam salvos no próprio aparelho.
+
 ## Onde mexer
 
 | Para... | Edite |
