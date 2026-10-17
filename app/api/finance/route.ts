@@ -1,23 +1,23 @@
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { prisma } from "@/lib/prisma";
+import { getUserIdFromSession } from "@/lib/auth";
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL!,
-});
+const MES_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-const prisma = new PrismaClient({ adapter });
+const naoAutorizado = () =>
+  Response.json({ error: "Não autorizado" }, { status: 401 });
+
+const numeroValido = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v) && v >= 0;
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+  const userId = await getUserIdFromSession();
+  if (!userId) return naoAutorizado();
 
-  const userId = Number(searchParams.get("userId"));
+  const { searchParams } = new URL(req.url);
   const mes = searchParams.get("mes");
 
-  if (!userId || !mes) {
-    return Response.json(
-      { error: "userId e mes são obrigatórios" },
-      { status: 400 }
-    );
+  if (!mes || !MES_REGEX.test(mes)) {
+    return Response.json({ error: "mes inválido (use AAAA-MM)" }, { status: 400 });
   }
 
   const finance = await prisma.financeData.findUnique({
@@ -46,68 +46,89 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const userId = await getUserIdFromSession();
+  if (!userId) return naoAutorizado();
+
+  let body: Record<string, unknown>;
+
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "JSON inválido" }, { status: 400 });
+  }
+
   const {
-    userId,
     mes,
     renda,
     gastosFixos,
     gastosVariaveis,
     percentualInvestimento,
     meta,
-    gastos,
-  } = await req.json();
+    gastos = [],
+  } = body;
 
-  if (!userId || !mes) {
-    return Response.json(
-      { error: "userId e mes são obrigatórios" },
-      { status: 400 }
-    );
+  if (typeof mes !== "string" || !MES_REGEX.test(mes)) {
+    return Response.json({ error: "mes inválido (use AAAA-MM)" }, { status: 400 });
   }
 
-  const finance = await prisma.financeData.upsert({
-    where: {
-      userId_mesReferencia: {
-        userId,
-        mesReferencia: mes,
+  if (
+    !numeroValido(renda) ||
+    !numeroValido(gastosFixos) ||
+    !numeroValido(gastosVariaveis) ||
+    !numeroValido(percentualInvestimento) ||
+    !numeroValido(meta) ||
+    percentualInvestimento > 100
+  ) {
+    return Response.json({ error: "Valores financeiros inválidos" }, { status: 400 });
+  }
+
+  if (
+    !Array.isArray(gastos) ||
+    !gastos.every(
+      (g) =>
+        g &&
+        typeof g.nome === "string" &&
+        g.nome.trim().length > 0 &&
+        numeroValido(g.valor)
+    )
+  ) {
+    return Response.json({ error: "Gastos inválidos" }, { status: 400 });
+  }
+
+  const dados = {
+    renda,
+    gastosFixos,
+    gastosVariaveis,
+    percentualInvestimento,
+    meta,
+  };
+
+  const finance = await prisma.$transaction(async (tx) => {
+    const registro = await tx.financeData.upsert({
+      where: {
+        userId_mesReferencia: {
+          userId,
+          mesReferencia: mes,
+        },
       },
-    },
-
-    update: {
-      renda,
-      gastosFixos,
-      gastosVariaveis,
-      percentualInvestimento,
-      meta,
-    },
-
-    create: {
-      userId,
-      mesReferencia: mes,
-      renda,
-      gastosFixos,
-      gastosVariaveis,
-      percentualInvestimento,
-      meta,
-    },
-  });
-
-  await prisma.expense.deleteMany({
-    where: {
-      financeId: finance.id,
-    },
-  });
-
-  if (gastos?.length > 0) {
-    await prisma.expense.createMany({
-      data: gastos.map(
-        (gasto: { nome: string; valor: number }) => ({
-          nome: gasto.nome,
-          valor: gasto.valor,
-          financeId: finance.id,
-        })
-      ),
+      update: dados,
+      create: { userId, mesReferencia: mes, ...dados },
     });
-  }
+
+    await tx.expense.deleteMany({ where: { financeId: registro.id } });
+
+    if (gastos.length > 0) {
+      await tx.expense.createMany({
+        data: gastos.map((g: { nome: string; valor: number }) => ({
+          nome: g.nome.trim(),
+          valor: g.valor,
+          financeId: registro.id,
+        })),
+      });
+    }
+
+    return registro;
+  });
 
   return Response.json({
     success: true,

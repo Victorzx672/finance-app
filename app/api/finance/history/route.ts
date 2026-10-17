@@ -1,18 +1,11 @@
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { prisma } from "@/lib/prisma";
+import { getUserIdFromSession } from "@/lib/auth";
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL!,
-});
-
-const prisma = new PrismaClient({ adapter });
-
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const userId = Number(searchParams.get("userId"));
+export async function GET() {
+  const userId = await getUserIdFromSession();
 
   if (!userId) {
-    return Response.json({ error: "userId obrigatório" }, { status: 400 });
+    return Response.json({ error: "Não autorizado" }, { status: 401 });
   }
 
   const meses = await prisma.financeData.findMany({

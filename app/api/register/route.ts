@@ -1,18 +1,16 @@
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
-
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL!,
-});
-
-const prisma = new PrismaClient({ adapter });
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
     const { usuario, senha } = await req.json();
 
-    if (!usuario || !senha) {
+    if (
+      typeof usuario !== "string" ||
+      typeof senha !== "string" ||
+      !usuario.trim() ||
+      !senha
+    ) {
       return Response.json(
         { error: "Usuário e senha são obrigatórios" },
         { status: 400 }

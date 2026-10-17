@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useId } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import {
   LineChart,
   Line,
@@ -20,11 +21,6 @@ interface Gasto {
   valor: number;
 }
 
-interface UserSalvo {
-  id: number;
-  usuario: string;
-}
-
 interface HistoricoMes {
   id: number;
   mesReferencia: string;
@@ -37,12 +33,6 @@ interface HistoricoMes {
 
 const fmt = (valor: number) =>
   valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const getUser = (): UserSalvo | null => {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("finance-user");
-  return raw ? (JSON.parse(raw) as UserSalvo) : null;
-};
 
 const getMesAtual = () => {
   const hoje = new Date();
@@ -97,13 +87,27 @@ function InputField({
   );
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+interface TooltipEntry {
+  name: string;
+  value: number;
+  color: string;
+}
+
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string;
+}) {
   if (!active || !payload?.length) return null;
 
   return (
     <div className="chart-tooltip">
       <p className="chart-tooltip-label">{label}</p>
-      {payload.map((entry: any) => (
+      {payload.map((entry) => (
         <p
           key={entry.name}
           className="chart-tooltip-value"
@@ -121,7 +125,8 @@ function CustomTooltip({ active, payload, label }: any) {
 
 export default function Home() {
   // Auth
-  const [logado, setLogado] = useState(false);
+  const { data: session, status } = useSession();
+  const logado = status === "authenticated";
   const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");
   const [erroLogin, setErroLogin] = useState("");
@@ -166,11 +171,12 @@ export default function Home() {
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
-  const carregarDados = async (userId: number, mes: string) => {
+  const carregarDados = async (mes: string) => {
     try {
       setCarregado(false);
 
-      const res = await fetch(`/api/finance?userId=${userId}&mes=${mes}`);
+      const res = await fetch(`/api/finance?mes=${mes}`);
+      if (!res.ok) throw new Error("Falha ao carregar dados");
       const data = await res.json();
 
       if (data.finance) {
@@ -188,21 +194,17 @@ export default function Home() {
       }
 
       setGastos(data.gastos ?? []);
-    } catch {
-      setRenda(0);
-      setGastosFixos(0);
-      setGastosVariaveis(0);
-      setPercentualInvestimento(0);
-      setMeta(0);
-      setGastos([]);
-    } finally {
       setCarregado(true);
+    } catch {
+      // Mantém carregado=false: o autosave não pode sobrescrever dados
+      // reais com zeros quando a leitura falha.
     }
   };
 
-  const carregarHistorico = async (userId: number) => {
+  const carregarHistorico = async () => {
     try {
-      const res = await fetch(`/api/finance/history?userId=${userId}`);
+      const res = await fetch("/api/finance/history");
+      if (!res.ok) throw new Error("Falha ao carregar histórico");
       const data = await res.json();
 
       setHistorico(data.historico ?? []);
@@ -214,25 +216,15 @@ export default function Home() {
   // ── Bootstrap ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const loginSalvo = localStorage.getItem("finance-login");
-    const user = getUser();
+    if (!logado) return;
 
-    if (loginSalvo === "true" && user) {
-      setLogado(true);
-      carregarDados(user.id, mesSelecionado);
-      carregarHistorico(user.id);
-    } else {
-      setCarregado(true);
-    }
-  }, []);
+    carregarHistorico();
+  }, [logado]);
 
   useEffect(() => {
     if (!logado) return;
 
-    const user = getUser();
-    if (!user) return;
-
-    carregarDados(user.id, mesSelecionado);
+    carregarDados(mesSelecionado);
   }, [mesSelecionado, logado]);
 
   // ── Autosave ────────────────────────────────────────────────────────────────
@@ -240,18 +232,14 @@ export default function Home() {
   useEffect(() => {
     if (!carregado || !logado) return;
 
-    const user = getUser();
-    if (!user) return;
-
     const salvar = async () => {
       setSalvando(true);
 
       try {
-        await fetch("/api/finance", {
+        const res = await fetch("/api/finance", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId: user.id,
             mes: mesSelecionado,
             renda,
             gastosFixos,
@@ -262,7 +250,7 @@ export default function Home() {
           }),
         });
 
-        await carregarHistorico(user.id);
+        if (res.ok) await carregarHistorico();
       } finally {
         setSalvando(false);
       }
@@ -290,23 +278,17 @@ export default function Home() {
     setLoadingLogin(true);
 
     try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ usuario, senha }),
+      const res = await signIn("credentials", {
+        usuario,
+        senha,
+        redirect: false,
       });
 
-      const data = await res.json();
-
-      if (data.success) {
-        setLogado(true);
-        setErroLogin("");
-        localStorage.setItem("finance-login", "true");
-        localStorage.setItem("finance-user", JSON.stringify(data.user));
-        carregarDados(data.user.id, mesSelecionado);
-        carregarHistorico(data.user.id);
+      if (res?.error) {
+        setErroLogin("Usuário ou senha incorretos");
       } else {
-        setErroLogin(data.error ?? "Erro no login");
+        // useSession passa a "authenticated" e os effects carregam os dados
+        setErroLogin("");
       }
     } catch {
       setErroLogin("Erro ao conectar com o servidor");
@@ -343,8 +325,8 @@ export default function Home() {
     }
   };
 
-  const sair = () => {
-    setLogado(false);
+  const sair = async () => {
+    await signOut({ redirect: false });
     setCarregado(false);
     setRenda(0);
     setGastosFixos(0);
@@ -353,8 +335,6 @@ export default function Home() {
     setMeta(0);
     setGastos([]);
     setHistorico([]);
-    localStorage.removeItem("finance-login");
-    localStorage.removeItem("finance-user");
     setUsuario("");
     setSenha("");
   };
@@ -387,6 +367,8 @@ export default function Home() {
   // ──────────────────────────────────────────────────────────────────────────
   // RENDER — Auth Screen
   // ──────────────────────────────────────────────────────────────────────────
+
+  if (status === "loading") return null;
 
   if (!logado) {
     return (
@@ -485,7 +467,7 @@ export default function Home() {
   // RENDER — App
   // ──────────────────────────────────────────────────────────────────────────
 
-  const userSalvo = getUser();
+  const nomeUsuario = session?.user?.name;
 
   return (
     <>
@@ -513,8 +495,8 @@ export default function Home() {
 
             <div>
               <span className="header-title">Finanças</span>
-              {userSalvo && (
-                <span className="header-user">@{userSalvo.usuario}</span>
+              {nomeUsuario && (
+                <span className="header-user">@{nomeUsuario}</span>
               )}
             </div>
           </div>
