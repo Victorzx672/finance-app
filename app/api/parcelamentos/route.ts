@@ -4,8 +4,11 @@ import { arredondar } from "@/lib/calculos";
 import { cartaoValido } from "@/lib/cartoes";
 import { categoriaValida } from "@/lib/categorias";
 import { erro, lerJson, naoAutorizado, textoValido as nomeValido, valorPositivo as valorValido } from "@/lib/api";
+import { MAX_NOME_PESSOA } from "@/lib/pessoas";
 import { MAX_PARCELAS, MES_REGEX, numeroDaParcela, somarMes } from "@/lib/parcelas";
 import { verificarAlertaLimite } from "@/lib/servidor-mes";
+
+const pessoaValida = (v: unknown) => v == null || (typeof v === "string" && v.length <= MAX_NOME_PESSOA);
 
 /** Parcelas que caem no mês pedido. */
 export async function GET(req: Request) {
@@ -29,6 +32,7 @@ export async function GET(req: Request) {
             valor: p.valorParcela,
             cartao: p.cartao,
             categoria: p.categoria,
+            pessoa: p.pessoa,
             numero,
             total: p.totalParcelas,
           },
@@ -50,7 +54,7 @@ export async function POST(req: Request) {
   const body = await lerJson(req);
   if (!body) return erro("JSON inválido");
 
-  const { nome, valorParcela, totalParcelas, parcelaAtual, mes, cartao, categoria } = body;
+  const { nome, valorParcela, totalParcelas, parcelaAtual, mes, cartao, categoria, pessoa } = body;
 
   if (!nomeValido(nome)) return erro("Informe o nome da compra.");
   if (!valorValido(valorParcela)) return erro("Informe o valor da parcela.");
@@ -74,6 +78,7 @@ export async function POST(req: Request) {
   if (typeof mes !== "string" || !MES_REGEX.test(mes)) return erro("mes inválido (use AAAA-MM)");
   if (cartao != null && !cartaoValido(cartao)) return erro("Cartão inválido.");
   if (categoria != null && !categoriaValida(categoria)) return erro("Categoria inválida.");
+  if (!pessoaValida(pessoa)) return erro("Pessoa inválida.");
 
   const criado = await prisma.parcelamento.create({
     data: {
@@ -84,6 +89,7 @@ export async function POST(req: Request) {
       mesInicio: somarMes(mes, -((parcelaAtual as number) - 1)),
       cartao: (cartao as string | null | undefined) ?? null,
       categoria: (categoria as string | null | undefined) ?? null,
+      pessoa: (pessoa as string | null | undefined)?.trim() || null,
     },
   });
 
@@ -99,12 +105,13 @@ export async function PATCH(req: Request) {
   const body = await lerJson(req);
   if (!body) return erro("JSON inválido");
 
-  const { id, nome, valorParcela, categoria } = body;
+  const { id, nome, valorParcela, categoria, pessoa } = body;
 
   if (!Number.isInteger(id)) return erro("id inválido");
   if (!nomeValido(nome)) return erro("Informe o nome da compra.");
   if (!valorValido(valorParcela)) return erro("Informe o valor da parcela.");
   if (categoria != null && !categoriaValida(categoria)) return erro("Categoria inválida.");
+  if (!pessoaValida(pessoa)) return erro("Pessoa inválida.");
 
   // updateMany com userId garante que só altera compras do próprio usuário
   const { count } = await prisma.parcelamento.updateMany({
@@ -113,6 +120,7 @@ export async function PATCH(req: Request) {
       nome: nome.trim(),
       valorParcela: arredondar(valorParcela),
       categoria: (categoria as string | null | undefined) ?? null,
+      pessoa: (pessoa as string | null | undefined)?.trim() || null,
     },
   });
 

@@ -1184,3 +1184,53 @@ button { -webkit-user-select: none; user-select: none; }
 @media (max-width: 760px) {
   .linha-texto { white-space: normal; overflow-wrap: anywhere; }
 }
+
+/* ══ "Guardei o que sobrou" no cartão Para investir ════════ */
+
+.summary-acao { margin-top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.acao-guardada { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 13px; font-weight: 600; color: var(--green); }
+.acao-guardada .link-btn { font-size: 13px; color: var(--muted); font-weight: 600; }
+
+/* ══ Quem gastou ═══════════════════════════════════════════ */
+
+.chip-pessoa { flex-shrink: 0; padding: 1px 8px; border-radius: 99px; background: var(--blue-soft); color: var(--blue); font-size: 12px; font-weight: 700; }
+.select-pessoa { flex: 1 1 130px; }
+
+/* ══ Importar fatura ═══════════════════════════════════════ */
+
+.importar-btn { margin-bottom: 14px; }
+
+.modal--larga { max-width: 760px; max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.modal--larga p { margin-bottom: 0; }
+.importar-resumo { margin-top: 4px; }
+.modal--larga > .select-categoria { flex: 0 0 auto; }
+
+.importar-lista { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; max-height: 44vh; overflow-y: auto; }
+.importar-linha { display: grid; grid-template-columns: 24px 28px minmax(0, 1fr) 150px 96px; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.importar-linha:last-child { border-bottom: none; }
+.importar-linha--off { opacity: 0.55; }
+/* as áreas nomeadas das listas (lead, nome, valor...) não existem nesta grade */
+.importar-linha .linha-data, .importar-linha .linha-nome, .importar-linha .linha-valor { grid-area: auto; }
+.importar-linha .select-categoria { height: 36px; font-size: 14px; flex: none; }
+.importar-linha input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
+
+@media (max-width: 760px) {
+  .importar-linha { grid-template-columns: 24px minmax(0, 1fr) auto; grid-template-areas: "chk nome valor" ". cat cat"; row-gap: 6px; }
+  .importar-linha .linha-data { display: none; }
+  .importar-linha > input { grid-area: chk; }
+  .importar-linha .linha-nome { grid-area: nome; }
+  .importar-linha .select-categoria { grid-area: cat; }
+  .importar-linha .linha-valor { grid-area: valor; }
+}
+
+/* ══ Previsão do mês ═══════════════════════════════════════ */
+
+.previsao { display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px; }
+.previsao-icone { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; }
+.previsao-texto p { margin-top: 2px; line-height: 1.5; color: var(--muted); }
+.previsao-texto b { color: var(--text); }
+.previsao--ok .previsao-icone { background: var(--green-soft); color: var(--green); }
+.previsao--alerta { border-color: var(--amber); background: var(--amber-soft); }
+.previsao--alerta .previsao-icone { background: var(--surface); color: var(--amber); }
+
+.oculto .previsao-texto p { filter: blur(7px); user-select: none; transition: filter 0.15s; }

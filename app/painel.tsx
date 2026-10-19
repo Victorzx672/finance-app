@@ -10,13 +10,17 @@ import {
   somar,
   type StatusLimite,
 } from "@/lib/calculos";
+import type { SaldoMes } from "@/lib/evolucao-guardado";
 import { FILTRO_VAZIO, type FiltroGastos } from "@/lib/filtro";
+import { gastosPorPessoa } from "@/lib/pessoas";
 import { chaveMes, faixaDeAnos, labelMes } from "@/lib/meses";
 import { faltaParaMeta, metaPrincipal, progressoMeta, totalGuardado, type MetaDinheiro } from "@/lib/metas";
 import { somarMes } from "@/lib/parcelas";
 import { serializarMes } from "@/lib/payload-mes";
+import { preverMes } from "@/lib/previsao";
 import { diasAteVencimento, pedeAtencao, situacaoConta } from "@/lib/vencimentos";
 import { AvisoLimite } from "./aviso-limite";
+import { PrevisaoMes } from "./previsao-mes";
 import { AvisoVencimentos, type ItemVencimento } from "./aviso-vencimentos";
 import { CartaoInfo } from "./cartao-info";
 import { PainelComparacao } from "./comparacao";
@@ -26,7 +30,7 @@ import {
   buscarContas,
   buscarFinanca,
   buscarGastosDoMes,
-  buscarGuardadoGeral,
+  buscarGuardado,
   buscarHistorico,
   buscarMetas,
   buscarParcelas,
@@ -40,8 +44,9 @@ import {
   type RendaFixaItem,
 } from "./dados";
 import { FontesRenda, novaFonte, type FonteRenda } from "./fontes-renda";
-import { PainelCategorias, PainelEvolucao, PainelProjecao } from "./graficos";
-import { CartaoGuardado } from "./guardado";
+import { PainelCategorias, PainelEvolucao, PainelEvolucaoGuardado, PainelPessoas, PainelProjecao } from "./graficos";
+import { AcaoGuardar, CartaoGuardado } from "./guardado";
+import { ImportarFatura, type ItemImportado } from "./importar-fatura";
 import { Lancamentos } from "./lancamentos";
 import { ListaGastos, type EdicaoGasto } from "./lista-gastos";
 import { PainelMetas, type DadosMeta } from "./metas";
@@ -94,12 +99,15 @@ function SummaryCard({
   accent,
   icon,
   sub,
+  acao,
 }: {
   label: string;
   value: string;
   accent: "green" | "red" | "blue" | "amber" | "purple" | "teal";
   icon: React.ReactNode;
   sub: string;
+  /** botão ou aviso extra no rodapé do cartão */
+  acao?: React.ReactNode;
 }) {
   return (
     <div className={`card summary-card summary-card--${accent}`}>
@@ -107,6 +115,7 @@ function SummaryCard({
       <span className="summary-label">{label}</span>
       <span className="summary-value">{value}</span>
       <span className="summary-sub">{sub}</span>
+      {acao && <div className="summary-acao">{acao}</div>}
     </div>
   );
 }
@@ -160,6 +169,8 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const [historico, setHistorico] = useState<HistoricoMes[]>([]);
   const [metas, setMetas] = useState<MetaDinheiro[]>([]);
   const [guardadoGeral, setGuardadoGeral] = useState(0);
+  const [saldos, setSaldos] = useState<SaldoMes[]>([]);
+  const [investGuardado, setInvestGuardado] = useState(0); // do "para investir" deste mês, quanto já foi guardado
   const [prefs, setPrefs] = useState<Preferencias>(PREFERENCIAS_PADRAO);
   const [prefsCarregadas, setPrefsCarregadas] = useState(false);
 
@@ -203,6 +214,20 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const { saldo, investimento, livre, percentGastos, mesesParaMeta, totalGastos, limiteGastos, folgaLimite, statusLimite } =
     resumo;
 
+  // Previsão: só no mês em andamento e enquanto o limite ainda não estourou (aí o aviso de limite já fala)
+  const previsao =
+    ehMesAtual && statusLimite !== "excedido"
+      ? preverMes({
+          mes: mesSelecionado,
+          diaAtual: new Date().getDate(),
+          renda,
+          gastosCertos: gastosFixos + totalContas + somar(parcelas),
+          gastosVariaveis: gastosVariaveis + somar(todosGastos.filter((g) => !g.parcela)),
+          limite: limiteGastos,
+        })
+      : null;
+
+  const linhasPessoa = gastosPorPessoa(todosGastos, prefs.pessoas);
   const linhasCategoria = agruparPorCategoria([...todosGastos, ...contas], gastosFixos, gastosVariaveis);
 
   const contasPendentes = contas.filter((c) => !pagos.includes(`conta:${c.id}`));
@@ -277,12 +302,13 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   useEffect(() => {
     let cancelado = false;
 
-    Promise.all([buscarHistorico(), buscarMetas(), buscarGuardadoGeral(), buscarPreferencias()]).then(
+    Promise.all([buscarHistorico(), buscarMetas(), buscarGuardado(), buscarPreferencias()]).then(
       ([h, m, g, p]) => {
         if (cancelado) return;
         setHistorico(h);
         setMetas(m);
-        setGuardadoGeral(g);
+        setGuardadoGeral(g.geral);
+        setSaldos(g.saldos);
         setPrefs(p);
         setPrefsCarregadas(true);
       }
@@ -337,6 +363,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       setGastosVariaveis(variaveis);
       setPercentualInvestimento(percentual);
       setGastos(dados.gastos);
+      setInvestGuardado(dados.finance?.investimentoGuardado ?? 0);
 
       // O que veio do servidor é o ponto de partida: ainda não há nada a salvar
       setSalvoJson(
@@ -519,12 +546,20 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
   // Gastos avulsos e do cartão
   const adicionarGasto =
-    (cartao: string | null) => (nome: string, valor: number, categoria: string | null, dia: number | null) =>
-      setGastos((prev) => [...prev, { id: crypto.randomUUID(), nome, valor, cartao, categoria, dia }]);
+    (cartao: string | null) =>
+    (nome: string, valor: number, categoria: string | null, dia: number | null, pessoa: string | null) =>
+      setGastos((prev) => [...prev, { id: crypto.randomUUID(), nome, valor, cartao, categoria, dia, pessoa }]);
 
   const adicionarParcelado =
     (cartao: string | null) =>
-    async (nome: string, valorParcela: number, parcelaAtual: number, totalParcelas: number, categoria: string | null) => {
+    async (
+      nome: string,
+      valorParcela: number,
+      parcelaAtual: number,
+      totalParcelas: number,
+      categoria: string | null,
+      pessoa: string | null
+    ) => {
       const falha = await chamar("/api/parcelamentos", "POST", {
         nome,
         valorParcela,
@@ -533,11 +568,65 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
         mes: mesSelecionado,
         cartao,
         categoria,
+        pessoa,
       });
 
       if (!falha) await Promise.all([carregarParcelas(mesSelecionado), carregarHistorico()]);
       return falha;
     };
+
+  /**
+   * Lança as compras de uma fatura importada. As à vista entram no mês como alterações
+   * (falta Salvar); as parceladas são gravadas na hora, como qualquer compra parcelada.
+   */
+  const importarFatura = async (itens: ItemImportado[], pessoa: string | null) => {
+    const parceladas = itens.filter((i) => i.parcela);
+    const aVista = itens.filter((i) => !i.parcela);
+    let falhas = 0;
+
+    for (const p of parceladas) {
+      const falha = await chamar("/api/parcelamentos", "POST", {
+        nome: p.nome,
+        valorParcela: p.valor,
+        totalParcelas: p.parcela!.total,
+        parcelaAtual: p.parcela!.atual,
+        mes: mesSelecionado,
+        cartao: CARTAO,
+        categoria: p.categoria,
+        pessoa,
+      });
+
+      if (falha) falhas++;
+    }
+
+    if (parceladas.length > 0) await Promise.all([carregarParcelas(mesSelecionado), carregarHistorico()]);
+
+    if (aVista.length > 0) {
+      setGastos((prev) => [
+        ...prev,
+        ...aVista.map((i) => ({
+          id: crypto.randomUUID(),
+          nome: i.nome,
+          valor: i.valor,
+          cartao: CARTAO,
+          categoria: i.categoria,
+          dia: i.dia,
+          pessoa,
+        })),
+      ]);
+    }
+
+    if (falhas === parceladas.length && aVista.length === 0) return "Não foi possível cadastrar as compras parceladas.";
+
+    mostrarAviso(
+      falhas > 0 ? "error" : "ok",
+      falhas > 0
+        ? `${itens.length - falhas} compras importadas; ${falhas} parceladas não puderam ser cadastradas.`
+        : `${itens.length} compras importadas. Confira e clique em Salvar.`
+    );
+
+    return null;
+  };
 
   const editarItem = async (gasto: Gasto, novo: EdicaoGasto) => {
     if (!gasto.parcela) {
@@ -550,6 +639,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       nome: novo.nome,
       valorParcela: novo.valor,
       categoria: novo.categoria,
+      pessoa: novo.pessoa,
     });
 
     if (!falha) await Promise.all([carregarParcelas(mesSelecionado), carregarHistorico()]);
@@ -662,14 +752,37 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   };
 
   // Dinheiro guardado
+  const recarregarGuardado = async () => {
+    const g = await buscarGuardado();
+    setGuardadoGeral(g.geral);
+    setSaldos(g.saldos);
+  };
+
   const aportarGuardado = async (aporte: number) => {
     const falha = await chamar("/api/guardado", "PUT", { aporte });
-    if (!falha) setGuardadoGeral(await buscarGuardadoGeral());
+    if (!falha) await recarregarGuardado();
     return falha;
   };
 
+  /** "Guardei o que sobrou": soma (ou ajusta) o "para investir" do mês no total guardado. */
+  const guardarInvestimento = async (valor: number) => {
+    const falha = await chamar("/api/guardado/investimento", "POST", { mes: mesSelecionado, valor });
+
+    if (falha) {
+      mostrarAviso("error", falha);
+      return;
+    }
+
+    setInvestGuardado(valor);
+    await recarregarGuardado();
+    mostrarAviso("ok", valor > 0 ? "Somado ao total guardado." : "Valor tirado do total guardado.", 3000);
+  };
+
   // Metas
-  const recarregarMetas = async () => setMetas(await buscarMetas());
+  const recarregarMetas = async () => {
+    setMetas(await buscarMetas());
+    await recarregarGuardado();
+  };
 
   const criarMeta = async (dados: DadosMeta) => {
     const falha = await chamar("/api/metas", "POST", dados);
@@ -873,6 +986,8 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
           />
         )}
 
+        {aba === "metas" && <PainelEvolucaoGuardado saldos={saldos} mesAtual={MES_ATUAL} escuro={escuro} />}
+
         {aba === "ano" && <PainelAno historico={historico} anoAtual={ANO_ATUAL} />}
 
         {aba === "prefs" &&
@@ -937,6 +1052,8 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
               folga={folgaLimite}
             />
 
+            {previsao && <PrevisaoMes previsao={previsao} limite={limiteGastos} />}
+
             <AvisoVencimentos itens={vencimentos} />
 
             {sugestao && (
@@ -982,6 +1099,16 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                   </Icon>
                 }
                 sub={`${percentualInvestimento}% do que sobra`}
+                acao={
+                  investimento > 0 || investGuardado > 0 ? (
+                    <AcaoGuardar
+                      investimento={investimento}
+                      jaGuardado={investGuardado}
+                      podeGuardar={carregado && !alterado && mesesComDados.has(mesSelecionado)}
+                      onGuardar={guardarInvestimento}
+                    />
+                  ) : undefined
+                }
               />
 
               <SummaryCard
@@ -1151,18 +1278,28 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                         placeholder="Compra no cartão"
                         vazio="Nenhuma compra no cartão neste mês."
                         parcelavel
+                        pessoas={prefs.pessoas}
                         mes={mesSelecionado}
                         filtro={filtro}
                         gastos={gastosNubank}
                         extra={
-                          <CartaoInfo
-                            mes={mesSelecionado}
-                            config={configCartao}
-                            usado={totalNubank}
-                            ehMesAtual={ehMesAtual}
-                            paga={faturaPaga}
-                            onPagar={(pago) => pagar(`fatura:${CARTAO}`, pago)}
-                          />
+                          <>
+                            <CartaoInfo
+                              mes={mesSelecionado}
+                              config={configCartao}
+                              usado={totalNubank}
+                              ehMesAtual={ehMesAtual}
+                              paga={faturaPaga}
+                              onPagar={(pago) => pagar(`fatura:${CARTAO}`, pago)}
+                            />
+
+                            <ImportarFatura
+                              mes={mesSelecionado}
+                              existentes={gastosNubank}
+                              pessoas={prefs.pessoas}
+                              onImportar={importarFatura}
+                            />
+                          </>
                         }
                         onAdicionar={adicionarGasto(CARTAO)}
                         onAdicionarParcelado={adicionarParcelado(CARTAO)}
@@ -1177,6 +1314,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                         descricao="Compras avulsas do mês, no dinheiro, Pix ou débito."
                         placeholder="O que você comprou?"
                         vazio="Nenhum gasto anotado neste mês."
+                        pessoas={prefs.pessoas}
                         mes={mesSelecionado}
                         filtro={filtro}
                         gastos={gastosAvulsos}
@@ -1226,6 +1364,8 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
             <div className="charts-grid">
               <PainelCategorias linhas={linhasCategoria} orcamentos={prefs.orcamentos} />
+
+              {prefs.pessoas.length > 0 && <PainelPessoas linhas={linhasPessoa} />}
 
               {dadosComparativo !== undefined && (
                 <PainelComparacao

@@ -2,6 +2,7 @@ import { getUserIdFromSession } from "@/lib/auth";
 import { arredondar } from "@/lib/calculos";
 import { erro, lerJson, naoAutorizado, textoValido, valorNaoNegativo, valorPositivo } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { registrarSaldoGuardado } from "@/lib/servidor-guardado";
 
 const MAX_METAS = 20;
 
@@ -46,6 +47,7 @@ export async function POST(req: Request) {
     },
   });
 
+  await registrarSaldoGuardado(userId);
   return Response.json({ success: true, id: criada.id });
 }
 
@@ -94,6 +96,7 @@ export async function PATCH(req: Request) {
   }
 
   await prisma.meta.update({ where: { id: meta.id }, data: dados });
+  await registrarSaldoGuardado(userId);
   return Response.json({ success: true });
 }
 
@@ -105,5 +108,6 @@ export async function DELETE(req: Request) {
   if (!Number.isInteger(id) || id <= 0) return erro("id inválido");
 
   await prisma.meta.deleteMany({ where: { id, userId } });
+  await registrarSaldoGuardado(userId);
   return Response.json({ success: true });
 }

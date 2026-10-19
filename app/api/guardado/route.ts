@@ -3,8 +3,9 @@ import { arredondar } from "@/lib/calculos";
 import { erro, lerJson, naoAutorizado, valorNaoNegativo } from "@/lib/api";
 import { aplicarAporte } from "@/lib/metas";
 import { prisma } from "@/lib/prisma";
+import { registrarSaldoGuardado } from "@/lib/servidor-guardado";
 
-/** Dinheiro guardado que não está em nenhuma meta. */
+/** Dinheiro guardado sem meta + a foto mensal do total guardado (para o gráfico de evolução). */
 export async function GET() {
   const userId = await getUserIdFromSession();
   if (!userId) return naoAutorizado();
@@ -12,7 +13,16 @@ export async function GET() {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { guardadoGeral: true } });
   if (!user) return naoAutorizado();
 
-  return Response.json({ guardadoGeral: user.guardadoGeral });
+  // Garante que o mês atual já tem um ponto (o gráfico começa no dia em que o app é aberto)
+  await registrarSaldoGuardado(userId);
+
+  const saldos = await prisma.saldoGuardado.findMany({
+    where: { userId },
+    orderBy: { mes: "asc" },
+    select: { mes: true, total: true },
+  });
+
+  return Response.json({ guardadoGeral: user.guardadoGeral, saldos });
 }
 
 /**
@@ -30,6 +40,7 @@ export async function PUT(req: Request) {
     if (!valorNaoNegativo(b.valor)) return erro("Valor guardado inválido.");
 
     await prisma.user.update({ where: { id: userId }, data: { guardadoGeral: arredondar(b.valor) } });
+    await registrarSaldoGuardado(userId);
     return Response.json({ success: true });
   }
 
@@ -45,5 +56,6 @@ export async function PUT(req: Request) {
     data: { guardadoGeral: aplicarAporte(user.guardadoGeral, b.aporte) },
   });
 
+  await registrarSaldoGuardado(userId);
   return Response.json({ success: true });
 }

@@ -27,14 +27,19 @@ model User {
   cartoes       Json    @default("{}")
   /// Dinheiro guardado que não está em nenhuma meta. O total guardado soma isto + as metas.
   guardadoGeral Float   @default(0)
+  /// Quem divide as contas e os gastos (ex.: ["Vitinho", "Iele"]). Vazio = sem "quem gastou".
+  pessoas       Json    @default("[]")
+  /// Manda e-mail avisando das contas que vencem hoje ou amanhã.
+  lembreteEmail Boolean @default(true)
 
-  finances      FinanceData[]
-  tokens        TokenEmail[]
-  parcelamentos Parcelamento[]
-  contasFixas   ContaFixa[]
-  rendasFixas   RendaFixa[]
-  pagamentos    Pagamento[]
-  metas         Meta[]
+  finances       FinanceData[]
+  tokens         TokenEmail[]
+  parcelamentos  Parcelamento[]
+  contasFixas    ContaFixa[]
+  rendasFixas    RendaFixa[]
+  saldosGuardado SaldoGuardado[]
+  pagamentos     Pagamento[]
+  metas          Meta[]
 }
 
 /// Compra parcelada. Aparece nos meses de mesInicio até mesInicio + totalParcelas - 1.
@@ -46,6 +51,7 @@ model Parcelamento {
   mesInicio     String // "AAAA-MM" da 1ª parcela
   cartao        String?
   categoria     String?
+  pessoa        String?
   criadoEm      DateTime @default(now())
 
   userId Int
@@ -77,6 +83,8 @@ model FinanceData {
   atualizadoEm           DateTime @updatedAt
   /// Já enviamos o alerta de "passou do limite" neste mês?
   alertaEnviado          Boolean  @default(false)
+  /// Quanto do "para investir" deste mês já foi somado ao total guardado.
+  investimentoGuardado   Float    @default(0)
 
   userId Int
   user   User @relation(fields: [userId], references: [id])
@@ -93,6 +101,7 @@ model Expense {
   valor     Float
   cartao    String? // nulo = gasto avulso; senão, o nome do cartão (ver lib/cartoes.ts)
   categoria String? // ver lib/categorias.ts; nulo = sem categoria
+  pessoa    String? // quem gastou (ver User.pessoas)
   dia       Int? // dia do mês em que a compra foi feita (1 a 31), opcional
 
   financeId Int
@@ -143,6 +152,18 @@ model RendaFixa {
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// Foto do total guardado ao fim de cada mês (o último valor do mês vale). Alimenta o gráfico de evolução.
+model SaldoGuardado {
+  id    Int    @id @default(autoincrement())
+  mes   String // "AAAA-MM"
+  total Float
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mes])
 }
 
 /// Marca uma conta (ou a fatura do cartão) como paga em um mês.

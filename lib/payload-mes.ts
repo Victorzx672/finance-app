@@ -11,6 +11,7 @@ export interface GastoDoMes {
   valor: number;
   cartao?: string | null;
   categoria?: string | null;
+  pessoa?: string | null;
   dia?: number | null;
 }
 
@@ -42,6 +43,7 @@ export function montarPayloadMes(d: DadosDoMes) {
       valor: g.valor,
       cartao: g.cartao ?? null,
       categoria: g.categoria ?? null,
+      pessoa: g.pessoa ?? null,
       dia: g.dia ?? null,
     })),
   };

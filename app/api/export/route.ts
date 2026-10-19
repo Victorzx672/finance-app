@@ -32,7 +32,7 @@ export async function GET() {
   ]);
 
   const linhas: (string | number)[][] = [
-    ["Mês", "Dia", "Tipo", "Descrição", "Categoria", "Cartão", "Parcela", "Valor (R$)"],
+    ["Mês", "Dia", "Tipo", "Descrição", "Categoria", "Cartão", "Parcela", "Pessoa", "Valor (R$)"],
   ];
 
   const add = (
@@ -40,7 +40,7 @@ export async function GET() {
     tipo: string,
     descricao: string,
     valor: number,
-    extra: { dia?: number | null; categoria?: string | null; cartao?: string | null; parcela?: string } = {}
+    extra: { dia?: number | null; categoria?: string | null; cartao?: string | null; parcela?: string; pessoa?: string | null } = {}
   ) =>
     linhas.push([
       labelMes(mes),
@@ -50,6 +50,7 @@ export async function GET() {
       extra.categoria ?? "",
       extra.cartao ?? "",
       extra.parcela ?? "",
+      extra.pessoa ?? "",
       dinheiro(valor),
     ]);
 
@@ -77,6 +78,7 @@ export async function GET() {
         dia: g.dia,
         categoria: g.categoria,
         cartao: g.cartao,
+        pessoa: g.pessoa,
       });
     }
 
@@ -88,6 +90,7 @@ export async function GET() {
           categoria: p.categoria,
           cartao: p.cartao,
           parcela: `${numero}/${p.totalParcelas}`,
+          pessoa: p.pessoa,
         });
       }
     }

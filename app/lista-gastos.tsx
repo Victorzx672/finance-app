@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CATEGORIAS } from "@/lib/categorias";
 import { filtroAtivo, filtrarGastos, type FiltroGastos } from "@/lib/filtro";
-import { ChipCategoria, Icon, fmt, numero, type Gasto } from "./ui";
+import { ChipCategoria, ChipPessoa, Icon, fmt, numero, type Gasto } from "./ui";
 
 /** Quantas linhas aparecem antes do "Ver todas". */
 const LINHAS_INICIAIS = 10;
@@ -13,6 +13,7 @@ export interface EdicaoGasto {
   valor: number;
   categoria: string | null;
   dia: number | null;
+  pessoa: string | null;
 }
 
 export function SelectCategoria({
@@ -43,6 +44,30 @@ export function SelectCategoria({
   );
 }
 
+/** Quem gastou. Só aparece quando há pessoas cadastradas nas Preferências. */
+export function SelectPessoa({
+  value,
+  onChange,
+  pessoas,
+  rotulo,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  pessoas: string[];
+  rotulo: string;
+}) {
+  return (
+    <select className="select-categoria select-pessoa" value={value} onChange={(e) => onChange(e.target.value)} aria-label={rotulo}>
+      <option value="">Quem gastou?</option>
+      {pessoas.map((p) => (
+        <option key={p} value={p}>
+          {p}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /** "12" -> dia válido (1 a 31) ou null */
 const lerDia = (v: string) => {
   const n = Math.floor(Number(v));
@@ -66,7 +91,10 @@ export function ListaGastos({
   onRemover,
   tema,
   embutido,
+  pessoas,
 }: {
+  /** quem divide os gastos (Preferências); vazio esconde o campo "Quem gastou?" */
+  pessoas: string[];
   /** dentro de outro cartão (abas): sem moldura nem cabeçalho próprios */
   embutido?: boolean;
   titulo: string;
@@ -82,13 +110,14 @@ export function ListaGastos({
   icone?: string;
   /** Mostra a opção "Compra parcelada" no formulário. */
   parcelavel?: boolean;
-  onAdicionar: (nome: string, valor: number, categoria: string | null, dia: number | null) => void;
+  onAdicionar: (nome: string, valor: number, categoria: string | null, dia: number | null, pessoa: string | null) => void;
   onAdicionarParcelado?: (
     nome: string,
     valorParcela: number,
     atual: number,
     total: number,
-    categoria: string | null
+    categoria: string | null,
+    pessoa: string | null
   ) => Promise<string | null>;
   /** Devolve uma mensagem de erro, ou null se deu certo. */
   onEditar: (gasto: Gasto, novo: EdicaoGasto) => Promise<string | null>;
@@ -98,6 +127,7 @@ export function ListaGastos({
   const [nome, setNome] = useState("");
   const [valor, setValor] = useState(0);
   const [categoria, setCategoria] = useState("");
+  const [pessoa, setPessoa] = useState("");
   const [dia, setDia] = useState("");
   const [parcelado, setParcelado] = useState(false);
   const [atual, setAtual] = useState("1");
@@ -109,6 +139,7 @@ export function ListaGastos({
   const [editValor, setEditValor] = useState(0);
   const [editCategoria, setEditCategoria] = useState("");
   const [editDia, setEditDia] = useState("");
+  const [editPessoa, setEditPessoa] = useState("");
   const [erroEdicao, setErroEdicao] = useState("");
   const [verTodas, setVerTodas] = useState(false);
 
@@ -138,7 +169,7 @@ export function ListaGastos({
         return;
       }
 
-      const falha = await onAdicionarParcelado(nome.trim(), valor, nAtual, nTotal, categoria || null);
+      const falha = await onAdicionarParcelado(nome.trim(), valor, nAtual, nTotal, categoria || null, pessoa || null);
 
       if (falha) {
         setErro(falha);
@@ -149,7 +180,7 @@ export function ListaGastos({
       setAtual("1");
       setTotal("2");
     } else {
-      onAdicionar(nome.trim(), valor, categoria || null, lerDia(dia));
+      onAdicionar(nome.trim(), valor, categoria || null, lerDia(dia), pessoa || null);
     }
 
     setNome("");
@@ -168,6 +199,7 @@ export function ListaGastos({
     setEditValor(g.valor);
     setEditCategoria(g.categoria ?? "");
     setEditDia(g.dia ? String(g.dia) : "");
+    setEditPessoa(g.pessoa ?? "");
     setErroEdicao("");
   };
 
@@ -182,6 +214,7 @@ export function ListaGastos({
       valor: editValor,
       categoria: editCategoria || null,
       dia: lerDia(editDia),
+      pessoa: editPessoa || null,
     });
 
     if (falha) setErroEdicao(falha);
@@ -236,6 +269,10 @@ export function ListaGastos({
           </div>
 
           <SelectCategoria value={categoria} onChange={setCategoria} rotulo={`Categoria - ${titulo}`} />
+
+          {pessoas.length > 0 && (
+            <SelectPessoa value={pessoa} onChange={setPessoa} pessoas={pessoas} rotulo={`Quem gastou - ${titulo}`} />
+          )}
 
           {!parcelado && (
             <div className="input-wrap tiny">
@@ -355,6 +392,10 @@ export function ListaGastos({
 
                   <SelectCategoria value={editCategoria} onChange={setEditCategoria} rotulo="Categoria" />
 
+                  {pessoas.length > 0 && (
+                    <SelectPessoa value={editPessoa} onChange={setEditPessoa} pessoas={pessoas} rotulo="Quem gastou" />
+                  )}
+
                   {!gasto.parcela && (
                     <div className="input-wrap tiny">
                       <input
@@ -399,6 +440,7 @@ export function ListaGastos({
                       {gasto.parcela.numero}/{gasto.parcela.total}
                     </span>
                   )}
+                  {gasto.pessoa && <ChipPessoa pessoa={gasto.pessoa} />}
                 </span>
 
                 <span className="linha-cat">{gasto.categoria && <ChipCategoria categoria={gasto.categoria} />}</span>

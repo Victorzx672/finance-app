@@ -82,3 +82,55 @@ export function CartaoGuardado({
     </section>
   );
 }
+
+/**
+ * "Guardei o que sobrou": no cartão "Para investir", soma o valor do mês ao total
+ * guardado. Só some a diferença, então clicar de novo não conta em dobro.
+ */
+export function AcaoGuardar({
+  investimento,
+  jaGuardado,
+  podeGuardar,
+  onGuardar,
+}: {
+  investimento: number;
+  jaGuardado: number;
+  /** o mês precisa estar salvo (e sem alterações) para o valor bater com o do servidor */
+  podeGuardar: boolean;
+  onGuardar: (valor: number) => Promise<void>;
+}) {
+  const [enviando, setEnviando] = useState(false);
+
+  const enviar = async (valor: number) => {
+    setEnviando(true);
+    await onGuardar(valor);
+    setEnviando(false);
+  };
+
+  const diferenca = Math.round((investimento - jaGuardado) * 100) / 100;
+
+  if (jaGuardado > 0 && diferenca === 0) {
+    return (
+      <span className="acao-guardada">
+        ✓ {fmt(jaGuardado)} já no total guardado
+        <button className="link-btn" disabled={enviando} onClick={() => enviar(0)}>
+          Desfazer
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <button
+        className="btn btn-outline btn-sm"
+        disabled={!podeGuardar || enviando}
+        title={podeGuardar ? undefined : "Salve o mês para guardar o que sobrou"}
+        onClick={() => enviar(investimento)}
+      >
+        {diferenca > 0 ? `Guardei ${fmt(diferenca)}` : `Ajustar guardado (${fmt(diferenca)})`}
+      </button>
+      {!podeGuardar && <span className="field-hint">Salve o mês antes.</span>}
+    </>
+  );
+}

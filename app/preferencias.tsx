@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CARTOES } from "@/lib/cartoes";
 import { CATEGORIAS } from "@/lib/categorias";
+import { MAX_NOME_PESSOA, MAX_PESSOAS, limparPessoas } from "@/lib/pessoas";
 import type { Preferencias } from "./dados";
 import { numero } from "./ui";
 
@@ -21,6 +22,11 @@ export function PainelPreferencias({
   onSalvar: (novas: Preferencias) => Promise<string | null>;
 }) {
   const [alertaEmail, setAlertaEmail] = useState(prefs.alertaEmail);
+  const [lembreteEmail, setLembreteEmail] = useState(prefs.lembreteEmail);
+  // sempre MAX_PESSOAS campos; os em branco são ignorados ao salvar
+  const [pessoas, setPessoas] = useState<string[]>(() =>
+    Array.from({ length: MAX_PESSOAS }, (_, i) => prefs.pessoas[i] ?? "")
+  );
   const [orcamentos, setOrcamentos] = useState<Record<string, number>>(prefs.orcamentos);
   const [cartoes, setCartoes] = useState(
     Object.fromEntries(
@@ -52,7 +58,13 @@ export function PainelPreferencias({
       cartoesFinal[nome] = { limite: c.limite > 0 ? c.limite : null, fechamento, vencimento };
     }
 
-    const falha = await onSalvar({ alertaEmail, orcamentos, cartoes: cartoesFinal });
+    const falha = await onSalvar({
+      alertaEmail,
+      lembreteEmail,
+      pessoas: limparPessoas(pessoas),
+      orcamentos,
+      cartoes: cartoesFinal,
+    });
     setMensagem(falha ? { tipo: "error", texto: falha } : { tipo: "ok", texto: "Preferências salvas." });
   };
 
@@ -69,6 +81,38 @@ export function PainelPreferencias({
             <input type="checkbox" checked={alertaEmail} onChange={(e) => setAlertaEmail(e.target.checked)} />
             Avisar por e-mail quando os gastos do mês passarem do limite (uma vez por mês)
           </label>
+
+          <label className="check-row">
+            <input type="checkbox" checked={lembreteEmail} onChange={(e) => setLembreteEmail(e.target.checked)} />
+            Lembrar por e-mail das contas e da fatura que vencem hoje ou amanhã
+          </label>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="panel-head">
+          <h2 className="panel-title">Quem divide os gastos</h2>
+          <p className="panel-sub">
+            Cadastre os nomes (até {MAX_PESSOAS}) para marcar quem fez cada compra e ver quanto cada um gastou. Deixe
+            tudo em branco para não usar.
+          </p>
+        </div>
+
+        <div className="panel-body prefs-grid">
+          {pessoas.map((nome, i) => (
+            <label key={i} className="field">
+              <span className="field-label">Pessoa {i + 1}</span>
+              <div className="input-wrap">
+                <input
+                  type="text"
+                  maxLength={MAX_NOME_PESSOA}
+                  placeholder={i === 0 ? "Ex.: Vitinho" : i === 1 ? "Ex.: Iele" : "Opcional"}
+                  value={nome}
+                  onChange={(e) => setPessoas((p) => p.map((v, j) => (j === i ? e.target.value : v)))}
+                />
+              </div>
+            </label>
+          ))}
         </div>
       </section>
 

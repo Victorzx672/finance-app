@@ -5,6 +5,7 @@ import { arredondar, somar } from "@/lib/calculos";
 import { cartaoValido } from "@/lib/cartoes";
 import { categoriaValida } from "@/lib/categorias";
 import { MES_REGEX } from "@/lib/parcelas";
+import { MAX_NOME_PESSOA } from "@/lib/pessoas";
 import { verificarAlertaLimite } from "@/lib/servidor-mes";
 
 const MAX_GASTOS = 500;
@@ -20,6 +21,7 @@ interface GastoEntrada {
   valor: number;
   cartao?: string | null;
   categoria?: string | null;
+  pessoa?: string | null;
   dia?: number | null;
 }
 
@@ -46,6 +48,7 @@ const gastoValido = (g: unknown): g is GastoEntrada => {
     valorNaoNegativo(x.valor) &&
     (x.cartao == null || cartaoValido(x.cartao)) &&
     (x.categoria == null || categoriaValida(x.categoria)) &&
+    (x.pessoa == null || (typeof x.pessoa === "string" && x.pessoa.length <= MAX_NOME_PESSOA)) &&
     (x.dia == null || inteiroEntre(x.dia, 1, 31))
   );
 };
@@ -134,6 +137,7 @@ export async function POST(req: Request) {
           valor: arredondar(g.valor),
           cartao: g.cartao ?? null,
           categoria: g.categoria ?? null,
+          pessoa: g.pessoa?.trim() || null,
           dia: g.dia ?? null,
           financeId: registro.id,
         })),

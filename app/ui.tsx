@@ -15,10 +15,21 @@ export interface Gasto {
   /** nulo/ausente = gasto avulso; senão, o nome do cartão */
   cartao?: string | null;
   categoria?: string | null;
+  /** quem gastou (ver Preferências) */
+  pessoa?: string | null;
   /** dia do mês da compra (1 a 31), opcional */
   dia?: number | null;
   /** Presente quando o item é uma parcela de compra parcelada (não entra no salvamento do mês). */
   parcela?: { numero: number; total: number; parcelamentoId: number };
+}
+
+/** Etiqueta de quem gastou. */
+export function ChipPessoa({ pessoa }: { pessoa: string }) {
+  return (
+    <span className="chip-pessoa" title={`Quem gastou: ${pessoa}`}>
+      {pessoa}
+    </span>
+  );
 }
 
 /** Etiqueta da categoria, com a cor dela. */

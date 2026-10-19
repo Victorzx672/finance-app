@@ -14,7 +14,9 @@ import {
   YAxis,
 } from "recharts";
 import { MAX_MESES_PROJECAO, serieProjecao } from "@/lib/calculos";
+import { serieGuardado, variacaoGuardado, type SaldoMes } from "@/lib/evolucao-guardado";
 import { labelCurto } from "@/lib/meses";
+import type { LinhaPessoa } from "@/lib/pessoas";
 import type { HistoricoMes } from "./dados";
 import { fmt } from "./ui";
 
@@ -258,6 +260,99 @@ export function PainelEvolucao({ historico, escuro }: { historico: HistoricoMes[
             <Bar dataKey="Renda" fill={c.azul} radius={[4, 4, 0, 0]} />
             <Bar dataKey="Gastos" fill={c.laranja} radius={[4, 4, 0, 0]} />
           </BarChart>
+        </ResponsiveContainer>
+      )}
+    </section>
+  );
+}
+
+// ─── Quem gastou ──────────────────────────────────────────────────────────────
+
+export function PainelPessoas({ linhas }: { linhas: LinhaPessoa[] }) {
+  const total = linhas.reduce((acc, l) => acc + l.valor, 0);
+
+  return (
+    <section className="card">
+      <div className="panel-head">
+        <h2 className="panel-title">Quem gastou</h2>
+        <p className="panel-sub">Compras do cartão e avulsas do mês, por pessoa.</p>
+      </div>
+
+      {total <= 0 ? (
+        <div className="chart-empty">Marque quem gastou em cada compra para ver a divisão aqui.</div>
+      ) : (
+        <div className="cat-list">
+          {linhas.map((l, i) => (
+            <div key={l.nome}>
+              <div className="cat-head">
+                <span className="cat-nome">
+                  <span className="cat-dot" style={{ background: CORES[i % CORES.length] }} />
+                  {l.nome}
+                </span>
+                <span className="cat-valor">
+                  {fmt(l.valor)}
+                  <small>{l.percentual.toFixed(0)}%</small>
+                </span>
+              </div>
+              <div className="cat-track">
+                <div className="cat-fill" style={{ width: `${l.percentual}%`, background: CORES[i % CORES.length] }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── Evolução do total guardado ───────────────────────────────────────────────
+
+export function PainelEvolucaoGuardado({
+  saldos,
+  mesAtual,
+  escuro,
+}: {
+  saldos: SaldoMes[];
+  mesAtual: string;
+  escuro: boolean;
+}) {
+  const c = tema(escuro);
+  const serie = serieGuardado(saldos, mesAtual).slice(-24);
+  const variacao = variacaoGuardado(serie);
+  const dados = serie.map((s) => ({ mes: labelCurto(s.mes), "Total guardado": s.total }));
+
+  return (
+    <section className="card">
+      <div className="panel-head">
+        <h2 className="panel-title">Evolução do total guardado</h2>
+        <p className="panel-sub">
+          {serie.length >= 2
+            ? `${variacao >= 0 ? "Cresceu" : "Caiu"} ${fmt(Math.abs(variacao))} desde ${labelCurto(serie[0].mes)}.`
+            : "O total guardado ao fim de cada mês."}
+        </p>
+      </div>
+
+      {serie.length < 2 ? (
+        <div className="chart-empty">
+          O gráfico aparece a partir do segundo mês de uso. Cada vez que você guardar ou retirar dinheiro, o total do mês
+          é registrado.
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={dados} margin={{ top: 8, right: 16, left: -6, bottom: 8 }}>
+            <CartesianGrid stroke={c.grade} strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="mes" tick={c.eixo} axisLine={false} tickLine={false} />
+            <YAxis tick={c.eixo} axisLine={false} tickLine={false} tickFormatter={abreviar} />
+            <Tooltip content={<CustomTooltip />} />
+            <Line
+              type="monotone"
+              dataKey="Total guardado"
+              stroke="#15803d"
+              strokeWidth={2.5}
+              dot={{ r: 3, fill: "#15803d", strokeWidth: 0 }}
+              activeDot={{ r: 5, strokeWidth: 0 }}
+            />
+          </LineChart>
         </ResponsiveContainer>
       )}
     </section>

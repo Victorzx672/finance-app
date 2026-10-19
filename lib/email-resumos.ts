@@ -90,3 +90,34 @@ export function enviarResumoMensal(para: string, usuario: string, d: DadosResumo
     ),
   });
 }
+
+export interface ItemVencimentoEmail {
+  nome: string;
+  valor: number;
+  quando: "hoje" | "amanhã";
+}
+
+/** Lembrete diário de contas e fatura que vencem hoje ou amanhã. */
+export function enviarLembreteVencimentos(para: string, usuario: string, itens: ItemVencimentoEmail[]) {
+  const link = urlBase();
+  const total = itens.reduce((acc, i) => acc + i.valor, 0);
+  const temHoje = itens.some((i) => i.quando === "hoje");
+
+  const texto = itens.map((i) => `  - ${i.nome}: ${moeda(i.valor)} (vence ${i.quando})`).join("\n");
+
+  return enviar({
+    para,
+    assunto: `${temHoje ? "Vence hoje" : "Vence amanhã"}: ${itens.length === 1 ? itens[0].nome : `${itens.length} contas`} - ${NOME_APP}`,
+    texto: `Olá, ${usuario}!\n\nContas que pedem atenção:\n${texto}\n\nTotal: ${moeda(total)}\n\nDepois de pagar, marque como paga no app para não receber mais o lembrete.\n${link}`,
+    html: cartao(
+      `Contas perto de vencer`,
+      `<p style="font-size:15px;margin:0 0 12px">Olá, ${esc(usuario)}! Estas contas vencem hoje ou amanhã:</p>
+       <table style="width:100%;border-collapse:collapse;font-size:15px">
+         ${itens.map((i) => linha(`${esc(i.nome)} <span style="color:${i.quando === "hoje" ? "#dc2626" : "#d97706"}">(vence ${i.quando})</span>`, moeda(i.valor))).join("")}
+         ${linha("Total", moeda(total), true)}
+       </table>
+       <p style="font-size:14px;margin:14px 0 0">Depois de pagar, marque como paga no app para não receber mais o lembrete.</p>`,
+      `Você pode desligar esses lembretes em Preferências, dentro do ${NOME_APP}. <a href="${link}">Abrir o app</a>`
+    ),
+  });
+}

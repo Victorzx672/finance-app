@@ -29,7 +29,7 @@ describe("montarPayloadMes", () => {
 
   it("campos opcionais ausentes viram null", () => {
     const p = montarPayloadMes({ ...base, gastos: [{ nome: "Água", valor: 30 }] });
-    expect(p.gastos[0]).toEqual({ nome: "Água", valor: 30, cartao: null, categoria: null, dia: null });
+    expect(p.gastos[0]).toEqual({ nome: "Água", valor: 30, cartao: null, categoria: null, pessoa: null, dia: null });
   });
 });
 

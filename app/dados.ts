@@ -1,5 +1,6 @@
 import { agruparPorCategoria, somar } from "@/lib/calculos";
 import type { ConfigCartao } from "@/lib/cartoes";
+import type { SaldoMes } from "@/lib/evolucao-guardado";
 import type { MetaDinheiro } from "@/lib/metas";
 import type { FonteRenda } from "./fontes-renda";
 import type { Gasto } from "./ui";
@@ -22,6 +23,8 @@ export interface FinancaDoMes {
     gastosVariaveis: number;
     percentualInvestimento: number;
     meta: number;
+    /** quanto do "para investir" do mês já foi somado ao total guardado */
+    investimentoGuardado: number;
   } | null;
   gastos: Gasto[];
   rendas: FonteRenda[];
@@ -34,6 +37,7 @@ interface ParcelaApi {
   valor: number;
   cartao: string | null;
   categoria: string | null;
+  pessoa: string | null;
   numero: number;
   total: number;
 }
@@ -81,6 +85,7 @@ export async function buscarParcelas(mes: string): Promise<Gasto[]> {
       valor: p.valor,
       cartao: p.cartao,
       categoria: p.categoria,
+      pessoa: p.pessoa,
       parcela: { numero: p.numero, total: p.total, parcelamentoId: p.parcelamentoId },
     }));
   } catch {
@@ -133,16 +138,22 @@ export async function buscarRendasFixas(mes: string): Promise<RendaFixaItem[]> {
   }
 }
 
-/** Dinheiro guardado que não está em nenhuma meta. */
-export async function buscarGuardadoGeral(): Promise<number> {
+export interface Guardado {
+  /** dinheiro guardado que não está em nenhuma meta */
+  geral: number;
+  /** total guardado ao fim de cada mês (para o gráfico de evolução) */
+  saldos: SaldoMes[];
+}
+
+export async function buscarGuardado(): Promise<Guardado> {
   try {
     const res = await fetch("/api/guardado");
-    if (!res.ok) return 0;
+    if (!res.ok) return { geral: 0, saldos: [] };
 
     const data = await res.json();
-    return data.guardadoGeral ?? 0;
+    return { geral: data.guardadoGeral ?? 0, saldos: data.saldos ?? [] };
   } catch {
-    return 0;
+    return { geral: 0, saldos: [] };
   }
 }
 
@@ -160,11 +171,20 @@ export async function buscarMetas(): Promise<MetaDinheiro[]> {
 
 export interface Preferencias {
   alertaEmail: boolean;
+  lembreteEmail: boolean;
+  /** quem divide as contas e os gastos; vazio = sem "quem gastou" */
+  pessoas: string[];
   orcamentos: Record<string, number>;
   cartoes: Record<string, ConfigCartao>;
 }
 
-export const PREFERENCIAS_PADRAO: Preferencias = { alertaEmail: true, orcamentos: {}, cartoes: {} };
+export const PREFERENCIAS_PADRAO: Preferencias = {
+  alertaEmail: true,
+  lembreteEmail: true,
+  pessoas: [],
+  orcamentos: {},
+  cartoes: {},
+};
 
 export async function buscarPreferencias(): Promise<Preferencias> {
   try {

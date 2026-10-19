@@ -3,6 +3,7 @@ import { arredondar } from "@/lib/calculos";
 import { erro, inteiroEntre, lerJson, naoAutorizado, valorNaoNegativo } from "@/lib/api";
 import { cartaoValido, type ConfigCartao } from "@/lib/cartoes";
 import { categoriaValida } from "@/lib/categorias";
+import { limparPessoas } from "@/lib/pessoas";
 import { prisma } from "@/lib/prisma";
 
 
@@ -46,13 +47,15 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { alertaEmail: true, orcamentos: true, cartoes: true },
+    select: { alertaEmail: true, lembreteEmail: true, orcamentos: true, cartoes: true, pessoas: true },
   });
 
   if (!user) return naoAutorizado();
 
   return Response.json({
     alertaEmail: user.alertaEmail,
+    lembreteEmail: user.lembreteEmail,
+    pessoas: limparPessoas(user.pessoas),
     orcamentos: lerOrcamentos(user.orcamentos),
     cartoes: lerCartoes(user.cartoes),
   });
@@ -66,11 +69,27 @@ export async function PUT(req: Request) {
   const b = await lerJson(req);
   if (!b) return erro("JSON inválido");
 
-  const dados: { alertaEmail?: boolean; orcamentos?: Record<string, number>; cartoes?: Record<string, ConfigCartao> } = {};
+  const dados: {
+    alertaEmail?: boolean;
+    lembreteEmail?: boolean;
+    pessoas?: string[];
+    orcamentos?: Record<string, number>;
+    cartoes?: Record<string, ConfigCartao>;
+  } = {};
 
   if (b.alertaEmail !== undefined) {
     if (typeof b.alertaEmail !== "boolean") return erro("alertaEmail inválido");
     dados.alertaEmail = b.alertaEmail;
+  }
+
+  if (b.lembreteEmail !== undefined) {
+    if (typeof b.lembreteEmail !== "boolean") return erro("lembreteEmail inválido");
+    dados.lembreteEmail = b.lembreteEmail;
+  }
+
+  if (b.pessoas !== undefined) {
+    if (!Array.isArray(b.pessoas)) return erro("pessoas inválido");
+    dados.pessoas = limparPessoas(b.pessoas);
   }
 
   if (b.orcamentos !== undefined) {
