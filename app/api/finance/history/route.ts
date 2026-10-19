@@ -8,7 +8,7 @@ export async function GET() {
   const userId = await getUserIdFromSession();
   if (!userId) return naoAutorizado();
 
-  const [meses, parcelamentos, contas] = await Promise.all([
+  const [meses, parcelamentos, contas, rendasFixas] = await Promise.all([
     prisma.financeData.findMany({
       where: { userId },
       include: { gastos: true },
@@ -16,15 +16,16 @@ export async function GET() {
     }),
     prisma.parcelamento.findMany({ where: { userId } }),
     prisma.contaFixa.findMany({ where: { userId } }),
+    prisma.rendaFixa.findMany({ where: { userId } }),
   ]);
 
   const historico = meses.map((mes) => {
-    const { saldo, totalGastos } = resumoDoMes(mes, parcelamentos, contas);
+    const { renda, saldo, totalGastos } = resumoDoMes(mes, parcelamentos, contas, rendasFixas);
 
     return {
       id: mes.id,
       mesReferencia: mes.mesReferencia,
-      renda: mes.renda,
+      renda,
       saldo,
       totalGastos,
     };

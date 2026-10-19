@@ -42,9 +42,9 @@ export async function POST(req: Request) {
   try {
     await enviarResumoMensal(user.email, user.usuario, {
       mesLabel: labelMes(mes),
-      renda: finance.renda,
+      renda: resumo.renda,
       totalGastos: resumo.totalGastos,
-      limite: limiteDeGastos(finance.renda),
+      limite: limiteDeGastos(resumo.renda),
       saldo: resumo.saldo,
       investimento: resumo.investimento,
       status: resumo.statusLimite,

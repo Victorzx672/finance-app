@@ -5,7 +5,9 @@ Controle financeiro pessoal. Next.js + Prisma (PostgreSQL) + NextAuth.
 ## O que faz
 
 **Este mês**
-- Várias **fontes de renda** (o total é calculado), gastos variáveis e % a investir. O mês é salvo **manualmente**: clique em **Salvar** (ou Ctrl+S). Enquanto houver alterações não salvas aparece um aviso no topo e uma barra fixa embaixo, e o app pergunta antes de sair, trocar de mês ou fechar/recarregar a página. Parcelas, contas fixas, metas, pagamentos e preferências são gravados na hora.
+- **Total guardado** em destaque no topo (dinheiro guardado sem meta + o que está nas metas), com botões Guardar/Retirar.
+- **Rendas fixas** (salários): cadastre uma vez e elas entram sozinhas em todos os meses, do mês em que foram criadas em diante; mudar o valor vale dali para frente e não mexe no passado. **Rendas extras** (freelance, 13º) valem só no mês, e uma extra pode virar fixa com "Tornar fixa". O total de renda é calculado. Gastos variáveis e % a investir ficam no mês.
+- Contas fixas, compras do cartão e gastos avulsos ficam em um só cartão com abas, em tabelas (data, descrição, categoria, valor), com busca e filtro por categoria. O mês é salvo **manualmente**: clique em **Salvar** (ou Ctrl+S). Enquanto houver alterações não salvas aparece um aviso no topo e uma barra fixa embaixo, e o app pergunta antes de sair, trocar de mês ou fechar/recarregar a página. Parcelas, contas fixas, metas, pagamentos e preferências são gravados na hora.
 - **Contas fixas** que se repetem todo mês (aluguel, internet...), com dia de vencimento e marcação de "paga". Mudar o valor vale do mês escolhido em diante e não altera o passado. Contas atrasadas ou perto de vencer aparecem num aviso.
 - **Cartão (Nubank):** compras à vista e **parceladas** (aparecem nos meses certos, ex.: 4/10, inclusive as já em andamento), limite usado, fechamento e vencimento da fatura.
 - **Outros gastos**, com categoria, data da compra e edição de cada item; **busca** por nome e categoria.

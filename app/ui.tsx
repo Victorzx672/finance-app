@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { corDaCategoria } from "@/lib/categorias";
 
 export const fmt = (valor: number) =>
   valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -18,6 +19,16 @@ export interface Gasto {
   dia?: number | null;
   /** Presente quando o item é uma parcela de compra parcelada (não entra no salvamento do mês). */
   parcela?: { numero: number; total: number; parcelamentoId: number };
+}
+
+/** Etiqueta da categoria, com a cor dela. */
+export function ChipCategoria({ categoria }: { categoria: string }) {
+  return (
+    <span className="chip-cat" title={categoria}>
+      <span className="chip-cat-dot" style={{ background: corDaCategoria(categoria) }} />
+      {categoria}
+    </span>
+  );
 }
 
 export function Icon({ size = 18, children }: { size?: number; children: React.ReactNode }) {

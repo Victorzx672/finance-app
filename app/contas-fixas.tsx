@@ -5,7 +5,7 @@ import { somar } from "@/lib/calculos";
 import { diasAteVencimento, situacaoConta, textoVencimento } from "@/lib/vencimentos";
 import type { ContaFixaItem } from "./dados";
 import { SelectCategoria } from "./lista-gastos";
-import { Icon, fmt, numero } from "./ui";
+import { ChipCategoria, Icon, fmt, numero } from "./ui";
 
 export interface EdicaoConta {
   nome: string;
@@ -29,7 +29,10 @@ export function PainelContasFixas({
   onEditar,
   onRemover,
   onPagar,
+  embutido,
 }: {
+  /** dentro de outro cartão (abas): sem moldura nem cabeçalho próprios */
+  embutido?: boolean;
   mes: string;
   contas: ContaFixaItem[];
   pagos: string[];
@@ -105,12 +108,16 @@ export function PainelContasFixas({
     else setEditando(null);
   };
 
+  const Raiz = embutido ? "div" : "section";
+
   return (
-    <section className="card tema-contas">
-      <div className="panel-head">
-        <h2 className="panel-title">Contas fixas</h2>
-        <p className="panel-sub">Se repetem todo mês. Marque as que você já pagou.</p>
-      </div>
+    <Raiz className={embutido ? "lista-embutida" : "card tema-contas"}>
+      {!embutido && (
+        <div className="panel-head">
+          <h2 className="panel-title">Contas fixas</h2>
+          <p className="panel-sub">Se repetem todo mês. Marque as que você já pagou.</p>
+        </div>
+      )}
 
       <div className="expense-form">
         <div className="expense-add-row">
@@ -169,7 +176,15 @@ export function PainelContasFixas({
       {contas.length === 0 ? (
         <div className="empty-state">Nenhuma conta fixa neste mês. Cadastre uma e ela passa a valer todo mês.</div>
       ) : (
-        <ul className="expense-list">
+        <ul className="linhas linhas--contas">
+          <li className="linhas-cabecalho" aria-hidden="true">
+            <span>Pago</span>
+            <span>Conta</span>
+            <span>Categoria</span>
+            <span>Valor</span>
+            <span />
+          </li>
+
           {contas.map((c) => {
             const chave = `conta:${c.id}`;
             const paga = pagos.includes(chave);
@@ -177,7 +192,7 @@ export function PainelContasFixas({
 
             if (editando === c.id) {
               return (
-                <li key={c.id} className="expense-item expense-item--edit">
+                <li key={c.id} className="linha-edicao">
                   <div className="edit-row">
                     <div className="input-wrap">
                       <input type="text" value={eNome} maxLength={80} aria-label="Nome" onChange={(e) => setENome(e.target.value)} />
@@ -224,7 +239,7 @@ export function PainelContasFixas({
             }
 
             return (
-              <li key={c.id} className={`conta-item conta-item--${situacao}`}>
+              <li key={c.id} className={`linha conta-item--${situacao}`}>
                 <input
                   type="checkbox"
                   className="conta-check"
@@ -235,9 +250,8 @@ export function PainelContasFixas({
                 />
 
                 <div className="conta-info">
-                  <span className="conta-nome">
+                  <span className="conta-nome" title={c.nome}>
                     {c.nome}
-                    {c.categoria && <span className="expense-tag">{c.categoria}</span>}
                   </span>
                   <span className="conta-prazo">
                     {paga
@@ -248,25 +262,29 @@ export function PainelContasFixas({
                   </span>
                 </div>
 
-                <span className="expense-value">{fmt(c.valor)}</span>
+                <span className="linha-cat">{c.categoria && <ChipCategoria categoria={c.categoria} />}</span>
 
-                <button className="btn-icon" onClick={() => iniciarEdicao(c)} aria-label={`Editar ${c.nome}`} title="Editar">
-                  <Icon size={16}>
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-                  </Icon>
-                </button>
+                <span className="expense-value linha-valor">{fmt(c.valor)}</span>
 
-                <button
-                  className="btn-icon btn-icon--danger"
-                  onClick={() => onRemover(c)}
-                  aria-label={`Remover ${c.nome}`}
-                  title="Remover deste mês em diante"
-                >
-                  <Icon size={16}>
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </Icon>
-                </button>
+                <span className="linha-acoes">
+                  <button className="btn-icon" onClick={() => iniciarEdicao(c)} aria-label={`Editar ${c.nome}`} title="Editar">
+                    <Icon size={16}>
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </Icon>
+                  </button>
+
+                  <button
+                    className="btn-icon btn-icon--danger"
+                    onClick={() => onRemover(c)}
+                    aria-label={`Remover ${c.nome}`}
+                    title="Remover deste mês em diante"
+                  >
+                    <Icon size={16}>
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </Icon>
+                  </button>
+                </span>
               </li>
             );
           })}
@@ -284,6 +302,6 @@ export function PainelContasFixas({
           )}
         </ul>
       )}
-    </section>
+    </Raiz>
   );
 }

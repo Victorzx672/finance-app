@@ -1,4 +1,4 @@
-import { calcularResumo, somar } from "@/lib/calculos";
+import { arredondar, calcularResumo, somar } from "@/lib/calculos";
 import { numeroDaParcela } from "@/lib/parcelas";
 
 // Soma tudo que compõe os gastos de um mês, igual na tela, no histórico, no e-mail e no CSV.
@@ -36,20 +36,29 @@ export const parcelasDoMes = <T extends { mesInicio: string; totalParcelas: numb
   mes: string
 ) => parcelamentos.filter((p) => numeroDaParcela(p, mes));
 
+/** Renda do mês: as rendas fixas que valem nele + as fontes avulsas salvas no mês (m.renda). */
+export const rendaDoMes = (m: Pick<MesSalvo, "mesReferencia" | "renda">, rendasFixas: ContaFixaMes[]) =>
+  arredondar(m.renda + somar(contasDoMes(rendasFixas, m.mesReferencia)));
+
 export function resumoDoMes(
   m: MesSalvo,
   parcelamentos: ParcelamentoMes[],
-  contas: ContaFixaMes[]
+  contas: ContaFixaMes[],
+  rendasFixas: ContaFixaMes[] = []
 ) {
   const contasFixas = somar(contasDoMes(contas, m.mesReferencia));
   const parcelas = parcelasDoMes(parcelamentos, m.mesReferencia).reduce((acc, p) => acc + p.valorParcela, 0);
+  const renda = rendaDoMes(m, rendasFixas);
 
-  return calcularResumo({
-    renda: m.renda,
-    gastosFixos: m.gastosFixos + contasFixas,
-    gastosVariaveis: m.gastosVariaveis,
-    gastosDetalhados: somar(m.gastos) + parcelas,
-    percentualInvestimento: m.percentualInvestimento,
-    meta: 0,
-  });
+  return {
+    renda,
+    ...calcularResumo({
+      renda,
+      gastosFixos: m.gastosFixos + contasFixas,
+      gastosVariaveis: m.gastosVariaveis,
+      gastosDetalhados: somar(m.gastos) + parcelas,
+      percentualInvestimento: m.percentualInvestimento,
+      meta: 0,
+    }),
+  };
 }

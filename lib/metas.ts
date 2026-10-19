@@ -23,7 +23,14 @@ export const metaConcluida = (m: Pick<MetaDinheiro, "alvo" | "guardado">) => m.g
 export const metaPrincipal = <T extends MetaDinheiro>(metas: T[]) =>
   [...metas].sort((a, b) => a.id - b.id).find((m) => !metaConcluida(m)) ?? null;
 
-export const totalNaReserva = (metas: MetaDinheiro[]) =>
+/** Tudo que já está guardado: o que está em metas + o que está guardado sem meta. */
+export const totalGuardado = (metas: Pick<MetaDinheiro, "guardado">[], guardadoGeral: number) =>
+  arredondar(guardadoGeral + metas.reduce((acc, m) => acc + m.guardado, 0));
+
+/** Soma um depósito (ou retirada, se negativo) ao valor guardado, sem deixar ficar abaixo de zero. */
+export const aplicarAporte = (atual: number, aporte: number) => Math.max(0, arredondar(atual + aporte));
+
+export const totalNaReserva =(metas: MetaDinheiro[]) =>
   arredondar(metas.filter((m) => m.reserva).reduce((acc, m) => acc + m.guardado, 0));
 
 /** Por quantos meses o que está na reserva cobre os gastos mensais. */

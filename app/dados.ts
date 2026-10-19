@@ -113,6 +113,39 @@ export async function buscarContas(mes: string): Promise<{ contas: ContaFixaItem
   }
 }
 
+export interface RendaFixaItem {
+  id: number;
+  nome: string;
+  valor: number;
+  mesInicio: string;
+}
+
+/** Rendas fixas (que se repetem todo mês) que valem no mês. */
+export async function buscarRendasFixas(mes: string): Promise<RendaFixaItem[]> {
+  try {
+    const res = await fetch(`/api/rendas-fixas?mes=${mes}`);
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    return data.rendas ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Dinheiro guardado que não está em nenhuma meta. */
+export async function buscarGuardadoGeral(): Promise<number> {
+  try {
+    const res = await fetch("/api/guardado");
+    if (!res.ok) return 0;
+
+    const data = await res.json();
+    return data.guardadoGeral ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function buscarMetas(): Promise<MetaDinheiro[]> {
   try {
     const res = await fetch("/api/metas");

@@ -12,7 +12,7 @@ import {
 } from "@/lib/calculos";
 import { FILTRO_VAZIO, type FiltroGastos } from "@/lib/filtro";
 import { chaveMes, faixaDeAnos, labelMes } from "@/lib/meses";
-import { faltaParaMeta, metaPrincipal, progressoMeta, type MetaDinheiro } from "@/lib/metas";
+import { faltaParaMeta, metaPrincipal, progressoMeta, totalGuardado, type MetaDinheiro } from "@/lib/metas";
 import { somarMes } from "@/lib/parcelas";
 import { serializarMes } from "@/lib/payload-mes";
 import { diasAteVencimento, pedeAtencao, situacaoConta } from "@/lib/vencimentos";
@@ -26,21 +26,27 @@ import {
   buscarContas,
   buscarFinanca,
   buscarGastosDoMes,
+  buscarGuardadoGeral,
   buscarHistorico,
   buscarMetas,
   buscarParcelas,
   buscarPreferencias,
+  buscarRendasFixas,
   type ContaFixaItem,
   type FinancaDoMes,
   type GastosDoMes,
   type HistoricoMes,
   type Preferencias,
+  type RendaFixaItem,
 } from "./dados";
 import { FontesRenda, novaFonte, type FonteRenda } from "./fontes-renda";
 import { PainelCategorias, PainelEvolucao, PainelProjecao } from "./graficos";
-import { ListaGastos, SelectCategoria, type EdicaoGasto } from "./lista-gastos";
+import { CartaoGuardado } from "./guardado";
+import { Lancamentos } from "./lancamentos";
+import { ListaGastos, type EdicaoGasto } from "./lista-gastos";
 import { PainelMetas, type DadosMeta } from "./metas";
 import { PainelPreferencias } from "./preferencias";
+import { RendasFixas, type EdicaoRendaFixa } from "./rendas-fixas";
 import { PainelAno } from "./resumo-ano";
 import { SeletorMes } from "./seletor-mes";
 import { Icon, InputField, LogoIcon, fmt, numero, type Gasto } from "./ui";
@@ -133,7 +139,8 @@ function BotaoIcone({
 
 export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string | null; onSair: () => void }) {
   // Dados do mês
-  const [rendas, setRendas] = useState<FonteRenda[]>([]);
+  const [rendas, setRendas] = useState<FonteRenda[]>([]); // rendas extras, só deste mês
+  const [rendasFixas, setRendasFixas] = useState<RendaFixaItem[]>([]); // se repetem todo mês
   const [gastosFixos, setGastosFixos] = useState(0);
   const [gastosVariaveis, setGastosVariaveis] = useState(0);
   const [percentualInvestimento, setPercentualInvestimento] = useState(0);
@@ -152,6 +159,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   // Dados gerais
   const [historico, setHistorico] = useState<HistoricoMes[]>([]);
   const [metas, setMetas] = useState<MetaDinheiro[]>([]);
+  const [guardadoGeral, setGuardadoGeral] = useState(0);
   const [prefs, setPrefs] = useState<Preferencias>(PREFERENCIAS_PADRAO);
   const [prefsCarregadas, setPrefsCarregadas] = useState(false);
 
@@ -171,7 +179,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
   // ── Valores calculados ──────────────────────────────────────────────────────
 
-  const renda = somar(rendas);
+  const renda = somar([...rendasFixas, ...rendas]);
   const totalContas = somar(contas);
 
   // Parcelas vêm da API (não entram no salvamento do mês) e se juntam aos gastos do mês
@@ -241,7 +249,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   // Mês sem nada preenchido: oferece copiar do mês anterior
   const mesVazio =
     carregado &&
-    renda === 0 &&
+    somar(rendas) === 0 &&
     gastosFixos === 0 &&
     gastosVariaveis === 0 &&
     gastos.length === 0 &&
@@ -264,16 +272,21 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     setPagos(dados.pagos);
   };
 
+  const carregarRendasFixas = async (mes: string) => setRendasFixas(await buscarRendasFixas(mes));
+
   useEffect(() => {
     let cancelado = false;
 
-    Promise.all([buscarHistorico(), buscarMetas(), buscarPreferencias()]).then(([h, m, p]) => {
-      if (cancelado) return;
-      setHistorico(h);
-      setMetas(m);
-      setPrefs(p);
-      setPrefsCarregadas(true);
-    });
+    Promise.all([buscarHistorico(), buscarMetas(), buscarGuardadoGeral(), buscarPreferencias()]).then(
+      ([h, m, g, p]) => {
+        if (cancelado) return;
+        setHistorico(h);
+        setMetas(m);
+        setGuardadoGeral(g);
+        setPrefs(p);
+        setPrefsCarregadas(true);
+      }
+    );
 
     return () => {
       cancelado = true;
@@ -293,6 +306,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       setPagos(dados.pagos);
     });
 
+    buscarRendasFixas(mesSelecionado).then((dados) => {
+      if (!cancelado) setRendasFixas(dados);
+    });
+
     buscarGastosDoMes(somarMes(mesSelecionado, -1)).then((dados) => {
       if (!cancelado) setComparativo({ mes: mesSelecionado, dados });
     });
@@ -310,7 +327,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       // assim nunca se grava zero por cima de dados reais.
       if (cancelado || !dados) return;
 
-      const rendasCarregadas = dados.rendas.length > 0 ? dados.rendas : [novaFonte()];
+      const rendasCarregadas = dados.rendas;
       const fixos = dados.finance?.gastosFixos ?? 0;
       const variaveis = dados.finance?.gastosVariaveis ?? 0;
       const percentual = dados.finance?.percentualInvestimento ?? 0;
@@ -597,6 +614,60 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     }
   };
 
+  // Rendas fixas (valem todo mês, deste em diante; gravadas na hora como as contas fixas)
+  const atualizarRendas = () => Promise.all([carregarRendasFixas(mesSelecionado), carregarHistorico()]);
+
+  const adicionarRendaFixa = async (nova: EdicaoRendaFixa) => {
+    const falha = await chamar("/api/rendas-fixas", "POST", { ...nova, mes: mesSelecionado });
+    if (!falha) await atualizarRendas();
+    return falha;
+  };
+
+  const editarRendaFixa = async (renda: RendaFixaItem, nova: EdicaoRendaFixa) => {
+    const falha = await chamar("/api/rendas-fixas", "PATCH", { id: renda.id, mes: mesSelecionado, ...nova });
+    if (!falha) await atualizarRendas();
+    return falha;
+  };
+
+  const removerRendaFixa = async (renda: RendaFixaItem) => {
+    if (
+      !window.confirm(
+        `Remover "${renda.nome}" de ${labelMes(mesSelecionado)} em diante? Os meses anteriores continuam com ela.`
+      )
+    ) {
+      return;
+    }
+
+    await chamar(`/api/rendas-fixas?id=${renda.id}&mes=${mesSelecionado}`, "DELETE");
+    await atualizarRendas();
+  };
+
+  /** Uma renda extra deste mês passa a ser fixa: entra em todos os meses, deste em diante. */
+  const tornarRendaFixa = async (fonte: FonteRenda) => {
+    const falha = await chamar("/api/rendas-fixas", "POST", {
+      nome: fonte.nome.trim(),
+      valor: fonte.valor,
+      mes: mesSelecionado,
+    });
+
+    if (falha) {
+      mostrarAviso("error", falha);
+      return;
+    }
+
+    // Sai das extras (senão contaria duas vezes). Isso é uma alteração do mês: falta Salvar.
+    setRendas((prev) => prev.filter((r) => r.id !== fonte.id));
+    await atualizarRendas();
+    mostrarAviso("ok", `"${fonte.nome.trim()}" agora é fixa. Clique em Salvar para concluir.`);
+  };
+
+  // Dinheiro guardado
+  const aportarGuardado = async (aporte: number) => {
+    const falha = await chamar("/api/guardado", "PUT", { aporte });
+    if (!falha) setGuardadoGeral(await buscarGuardadoGeral());
+    return falha;
+  };
+
   // Metas
   const recarregarMetas = async () => setMetas(await buscarMetas());
 
@@ -635,12 +706,16 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     const f = sugestao?.finance;
     if (!sugestao || !f) return;
 
-    // Copia as fontes (ou, se o mês antigo não tinha, o total como uma só)
-    setRendas(
-      sugestao.rendas.length > 0
-        ? sugestao.rendas.map((r) => ({ ...r, id: crypto.randomUUID() }))
-        : [{ ...novaFonte(), nome: "Renda", valor: f.renda }]
-    );
+    // Com rendas fixas cadastradas, a renda do mês já vem delas: copiar as extras do mês
+    // anterior contaria o salário duas vezes. Sem rendas fixas, copia as fontes (ou, se o
+    // mês antigo não tinha, o total como uma só).
+    if (rendasFixas.length === 0) {
+      setRendas(
+        sugestao.rendas.length > 0
+          ? sugestao.rendas.map((r) => ({ ...r, id: crypto.randomUUID() }))
+          : [{ ...novaFonte(), nome: "Renda", valor: f.renda }]
+      );
+    }
     setGastosFixos(f.gastosFixos);
     setGastosVariaveis(f.gastosVariaveis);
     setPercentualInvestimento(f.percentualInvestimento);
@@ -775,6 +850,16 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
             </button>
           ))}
         </nav>
+
+        {(aba === "mes" || aba === "metas") && (
+          <CartaoGuardado
+            total={totalGuardado(metas, guardadoGeral)}
+            semMeta={guardadoGeral}
+            naMetas={totalGuardado(metas, 0)}
+            quantidadeMetas={metas.length}
+            onAporte={aportarGuardado}
+          />
+        )}
 
         {aba === "metas" && (
           <PainelMetas
@@ -967,8 +1052,8 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
               )}
             </div>
 
-            <div className="main-layout">
-              <section className="card">
+            <div className="mes-layout">
+              <section className="card coluna-numeros">
                 <div className="panel-head">
                   <h2 className="panel-title">Seus números do mês</h2>
                   <p className="panel-sub">Digite os valores em reais.</p>
@@ -978,11 +1063,14 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                   <div className="input-section">
                     <span className="input-section-label">Entrada</span>
 
-                    <p className="field-hint">
-                      Cada fonte de renda do mês (já líquida). O total é calculado sozinho.
-                    </p>
+                    <RendasFixas
+                      rendas={rendasFixas}
+                      onAdicionar={adicionarRendaFixa}
+                      onEditar={editarRendaFixa}
+                      onRemover={removerRendaFixa}
+                    />
 
-                    <FontesRenda fontes={rendas} total={renda} onChange={setRendas} />
+                    <FontesRenda fontes={rendas} total={renda} onChange={setRendas} onTornarFixa={tornarRendaFixa} />
                   </div>
 
                   <div className="input-section">
@@ -990,7 +1078,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
                     <InputField
                       label="Outros gastos fixos"
-                      hint="Fixos que não estão nas contas fixas (veja ao lado)."
+                      hint="Fixos que não estão nas contas fixas (veja a aba Contas fixas ao lado)."
                       type="number"
                       prefix="R$"
                       placeholder="0,00"
@@ -1032,120 +1120,109 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                 </div>
               </section>
 
-              <div className="right-col">
-                <PainelContasFixas
-                  mes={mesSelecionado}
-                  contas={contas}
-                  pagos={pagos}
-                  ehMesAtual={ehMesAtual}
-                  onAdicionar={adicionarConta}
-                  onEditar={editarConta}
-                  onRemover={removerConta}
-                  onPagar={pagar}
-                />
-
-                {todosGastos.length > 0 && (
-                  <section className="card filtro-barra">
-                    <div className="input-wrap">
-                      <input
-                        type="search"
-                        placeholder="Buscar compra pelo nome"
-                        aria-label="Buscar compra"
-                        value={filtro.texto}
-                        onChange={(e) => setFiltro((f) => ({ ...f, texto: e.target.value }))}
+              <div className="coluna-lancamentos">
+                <Lancamentos
+                  abas={[
+                    { id: "contas", rotulo: "Contas fixas", quantidade: contas.length, total: totalContas, cor: "#0f766e" },
+                    { id: "cartao", rotulo: "Cartão Nubank", quantidade: gastosNubank.length, total: totalNubank, cor: "#7c3aed" },
+                    { id: "outros", rotulo: "Outros gastos", quantidade: gastosAvulsos.length, total: somar(gastosAvulsos), cor: "#64748b" },
+                  ]}
+                  filtro={filtro}
+                  onFiltro={setFiltro}
+                  conteudo={{
+                    contas: (
+                      <PainelContasFixas
+                        embutido
+                        mes={mesSelecionado}
+                        contas={contas}
+                        pagos={pagos}
+                        ehMesAtual={ehMesAtual}
+                        onAdicionar={adicionarConta}
+                        onEditar={editarConta}
+                        onRemover={removerConta}
+                        onPagar={pagar}
                       />
-                    </div>
-
-                    <SelectCategoria
-                      value={filtro.categoria}
-                      onChange={(v) => setFiltro((f) => ({ ...f, categoria: v }))}
-                      rotulo="Filtrar por categoria"
-                      vazio="Todas as categorias"
-                    />
-
-                    {(filtro.texto || filtro.categoria) && (
-                      <button className="btn btn-outline btn-sm" onClick={() => setFiltro(FILTRO_VAZIO)}>
-                        Limpar
-                      </button>
-                    )}
-                  </section>
-                )}
-
-                <ListaGastos
-                  titulo="Cartão Nubank"
-                  descricao="Compras à vista e parceladas deste mês."
-                  placeholder="Compra no cartão"
-                  vazio="Nenhuma compra no cartão neste mês."
-                  tema="nubank"
-                  icone="/nubank-card.png"
-                  parcelavel
-                  mes={mesSelecionado}
-                  filtro={filtro}
-                  gastos={gastosNubank}
-                  extra={
-                    <CartaoInfo
-                      mes={mesSelecionado}
-                      config={configCartao}
-                      usado={totalNubank}
-                      ehMesAtual={ehMesAtual}
-                      paga={faturaPaga}
-                      onPagar={(pago) => pagar(`fatura:${CARTAO}`, pago)}
-                    />
-                  }
-                  onAdicionar={adicionarGasto(CARTAO)}
-                  onAdicionarParcelado={adicionarParcelado(CARTAO)}
-                  onEditar={editarItem}
-                  onRemover={removerItem}
-                />
-
-                <ListaGastos
-                  titulo="Outros gastos"
-                  descricao="Compras avulsas do mês, no dinheiro, Pix ou débito."
-                  placeholder="O que você comprou?"
-                  vazio="Nenhum gasto anotado neste mês."
-                  mes={mesSelecionado}
-                  filtro={filtro}
-                  gastos={gastosAvulsos}
-                  onAdicionar={adicionarGasto(null)}
-                  onEditar={editarItem}
-                  onRemover={removerItem}
+                    ),
+                    cartao: (
+                      <ListaGastos
+                        embutido
+                        titulo="Cartão Nubank"
+                        descricao="Compras à vista e parceladas deste mês."
+                        placeholder="Compra no cartão"
+                        vazio="Nenhuma compra no cartão neste mês."
+                        parcelavel
+                        mes={mesSelecionado}
+                        filtro={filtro}
+                        gastos={gastosNubank}
+                        extra={
+                          <CartaoInfo
+                            mes={mesSelecionado}
+                            config={configCartao}
+                            usado={totalNubank}
+                            ehMesAtual={ehMesAtual}
+                            paga={faturaPaga}
+                            onPagar={(pago) => pagar(`fatura:${CARTAO}`, pago)}
+                          />
+                        }
+                        onAdicionar={adicionarGasto(CARTAO)}
+                        onAdicionarParcelado={adicionarParcelado(CARTAO)}
+                        onEditar={editarItem}
+                        onRemover={removerItem}
+                      />
+                    ),
+                    outros: (
+                      <ListaGastos
+                        embutido
+                        titulo="Outros gastos"
+                        descricao="Compras avulsas do mês, no dinheiro, Pix ou débito."
+                        placeholder="O que você comprou?"
+                        vazio="Nenhum gasto anotado neste mês."
+                        mes={mesSelecionado}
+                        filtro={filtro}
+                        gastos={gastosAvulsos}
+                        onAdicionar={adicionarGasto(null)}
+                        onEditar={editarItem}
+                        onRemover={removerItem}
+                      />
+                    ),
+                  }}
                 />
               </div>
-
-              <aside className="card history-panel">
-                <div className="panel-head">
-                  <h2 className="panel-title">Meses anteriores</h2>
-                  <p className="panel-sub">Clique para abrir um mês.</p>
-                </div>
-
-                {historico.length === 0 ? (
-                  <div className="history-empty">Nenhum mês salvo ainda.</div>
-                ) : (
-                  <div className="history-list">
-                    {historico.map((item) => (
-                      <button
-                        key={item.id}
-                        className={`history-item ${item.mesReferencia === mesSelecionado ? "active" : ""}`}
-                        onClick={() => mudarMes(item.mesReferencia)}
-                      >
-                        <span className="history-month">{labelMes(item.mesReferencia)}</span>
-
-                        <span className={`history-saldo ${item.saldo >= 0 ? "positive" : "negative"}`}>
-                          {fmt(item.saldo)}
-                        </span>
-
-                        <span className="history-sub">
-                          Gastou {fmt(item.totalGastos)}
-                          {passouDoLimite(item.renda, item.totalGastos) && (
-                            <span className="history-flag">acima de {LIMITE_GASTOS_PERCENT}%</span>
-                          )}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </aside>
             </div>
+
+            <section className="card history-panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Meses anteriores</h2>
+                <p className="panel-sub">Clique para abrir um mês.</p>
+              </div>
+
+              {historico.length === 0 ? (
+                <div className="history-empty">Nenhum mês salvo ainda.</div>
+              ) : (
+                <div className="history-list history-list--grade">
+                  {historico.map((item) => (
+                    <button
+                      key={item.id}
+                      className={`history-item ${item.mesReferencia === mesSelecionado ? "active" : ""}`}
+                      onClick={() => mudarMes(item.mesReferencia)}
+                    >
+                      <span className="history-month">{labelMes(item.mesReferencia)}</span>
+
+                      <span className={`history-saldo ${item.saldo >= 0 ? "positive" : "negative"}`}>
+                        {fmt(item.saldo)}
+                      </span>
+
+                      <span className="history-sub">
+                        Gastou {fmt(item.totalGastos)}
+                        {passouDoLimite(item.renda, item.totalGastos) && (
+                          <span className="history-flag">acima de {LIMITE_GASTOS_PERCENT}%</span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
 
             <div className="charts-grid">
               <PainelCategorias linhas={linhasCategoria} orcamentos={prefs.orcamentos} />

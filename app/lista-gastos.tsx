@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { CATEGORIAS } from "@/lib/categorias";
 import { filtroAtivo, filtrarGastos, type FiltroGastos } from "@/lib/filtro";
-import { Icon, fmt, numero, type Gasto } from "./ui";
+import { ChipCategoria, Icon, fmt, numero, type Gasto } from "./ui";
+
+/** Quantas linhas aparecem antes do "Ver todas". */
+const LINHAS_INICIAIS = 10;
 
 export interface EdicaoGasto {
   nome: string;
@@ -62,7 +65,10 @@ export function ListaGastos({
   onEditar,
   onRemover,
   tema,
+  embutido,
 }: {
+  /** dentro de outro cartão (abas): sem moldura nem cabeçalho próprios */
+  embutido?: boolean;
   titulo: string;
   descricao: string;
   placeholder: string;
@@ -104,10 +110,17 @@ export function ListaGastos({
   const [editCategoria, setEditCategoria] = useState("");
   const [editDia, setEditDia] = useState("");
   const [erroEdicao, setErroEdicao] = useState("");
+  const [verTodas, setVerTodas] = useState(false);
 
   const visiveis = filtrarGastos(gastos, filtro);
   const filtrando = filtroAtivo(filtro);
   const somaLista = visiveis.reduce((acc, g) => acc + g.valor, 0);
+  // A linha em edição nunca fica escondida atrás do "Ver todas"
+  const mostradas =
+    verTodas || visiveis.length <= LINHAS_INICIAIS + 2
+      ? visiveis
+      : visiveis.filter((g, i) => i < LINHAS_INICIAIS || g.id === editando);
+  const Raiz = embutido ? "div" : "section";
   const mm = mes.slice(5, 7);
 
   const nAtual = Math.floor(Number(atual)) || 0;
@@ -176,18 +189,20 @@ export function ListaGastos({
   };
 
   return (
-    <section className={`card ${tema ? `tema-${tema}` : ""}`}>
-      <div className="panel-head panel-head--icon">
-        {icone && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={icone} alt="" className="panel-icon" width={64} height={40} />
-        )}
+    <Raiz className={embutido ? "lista-embutida" : `card ${tema ? `tema-${tema}` : ""}`}>
+      {!embutido && (
+        <div className="panel-head panel-head--icon">
+          {icone && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={icone} alt="" className="panel-icon" width={64} height={40} />
+          )}
 
-        <div>
-          <h2 className="panel-title">{titulo}</h2>
-          <p className="panel-sub">{descricao}</p>
+          <div>
+            <h2 className="panel-title">{titulo}</h2>
+            <p className="panel-sub">{descricao}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {extra}
 
@@ -302,10 +317,18 @@ export function ListaGastos({
       ) : visiveis.length === 0 ? (
         <div className="empty-state">Nenhum item encontrado com esse filtro.</div>
       ) : (
-        <ul className="expense-list">
-          {visiveis.map((gasto) =>
+        <ul className="linhas">
+          <li className="linhas-cabecalho" aria-hidden="true">
+            <span>Data</span>
+            <span>Descrição</span>
+            <span>Categoria</span>
+            <span>Valor</span>
+            <span />
+          </li>
+
+          {mostradas.map((gasto) =>
             editando === gasto.id ? (
-              <li key={gasto.id} className="expense-item expense-item--edit">
+              <li key={gasto.id} className="linha-edicao">
                 <div className="edit-row">
                   <div className="input-wrap">
                     <input
@@ -364,47 +387,58 @@ export function ListaGastos({
                 </div>
               </li>
             ) : (
-              <li key={gasto.id} className="expense-item">
-                <span className="expense-name">
-                  {gasto.dia && (
-                    <span className="expense-dia" title="Data da compra">
-                      {String(gasto.dia).padStart(2, "0")}/{mm}
-                    </span>
-                  )}
-                  {gasto.nome}
+              <li key={gasto.id} className="linha">
+                <span className="linha-data" title="Data da compra">
+                  {gasto.dia ? `${String(gasto.dia).padStart(2, "0")}/${mm}` : "—"}
+                </span>
+
+                <span className="linha-nome" title={gasto.nome}>
+                  <span className="linha-texto">{gasto.nome}</span>
                   {gasto.parcela && (
                     <span className="expense-badge" title="Parcela deste mês">
                       {gasto.parcela.numero}/{gasto.parcela.total}
                     </span>
                   )}
-                  {gasto.categoria && <span className="expense-tag">{gasto.categoria}</span>}
                 </span>
-                <span className="expense-value">{fmt(gasto.valor)}</span>
 
-                <button
-                  className="btn-icon"
-                  onClick={() => iniciarEdicao(gasto)}
-                  aria-label={`Editar ${gasto.nome}`}
-                  title="Editar"
-                >
-                  <Icon size={16}>
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-                  </Icon>
-                </button>
+                <span className="linha-cat">{gasto.categoria && <ChipCategoria categoria={gasto.categoria} />}</span>
 
-                <button
-                  className="btn-icon btn-icon--danger"
-                  onClick={() => onRemover(gasto)}
-                  aria-label={`Remover ${gasto.nome}`}
-                  title={gasto.parcela ? "Remover a compra parcelada inteira" : "Remover"}
-                >
-                  <Icon size={16}>
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </Icon>
-                </button>
+                <span className="expense-value linha-valor">{fmt(gasto.valor)}</span>
+
+                <span className="linha-acoes">
+                  <button
+                    className="btn-icon"
+                    onClick={() => iniciarEdicao(gasto)}
+                    aria-label={`Editar ${gasto.nome}`}
+                    title="Editar"
+                  >
+                    <Icon size={16}>
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </Icon>
+                  </button>
+
+                  <button
+                    className="btn-icon btn-icon--danger"
+                    onClick={() => onRemover(gasto)}
+                    aria-label={`Remover ${gasto.nome}`}
+                    title={gasto.parcela ? "Remover a compra parcelada inteira" : "Remover"}
+                  >
+                    <Icon size={16}>
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </Icon>
+                  </button>
+                </span>
               </li>
             )
+          )}
+
+          {visiveis.length > LINHAS_INICIAIS + 2 && (
+            <li className="linhas-mais">
+              <button className="link-btn center" onClick={() => setVerTodas((v) => !v)}>
+                {verTodas ? "Mostrar menos" : `Ver todas (${visiveis.length})`}
+              </button>
+            </li>
           )}
 
           <li className="expense-total">
@@ -413,6 +447,6 @@ export function ListaGastos({
           </li>
         </ul>
       )}
-    </section>
+    </Raiz>
   );
 }

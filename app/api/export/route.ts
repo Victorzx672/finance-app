@@ -20,7 +20,7 @@ export async function GET() {
   const userId = await getUserIdFromSession();
   if (!userId) return naoAutorizado();
 
-  const [meses, parcelamentos, contas] = await Promise.all([
+  const [meses, parcelamentos, contas, rendasFixas] = await Promise.all([
     prisma.financeData.findMany({
       where: { userId },
       include: { gastos: { orderBy: { id: "asc" } }, rendas: { orderBy: { id: "asc" } } },
@@ -28,6 +28,7 @@ export async function GET() {
     }),
     prisma.parcelamento.findMany({ where: { userId }, orderBy: { id: "asc" } }),
     prisma.contaFixa.findMany({ where: { userId }, orderBy: [{ dia: "asc" }, { id: "asc" }] }),
+    prisma.rendaFixa.findMany({ where: { userId }, orderBy: { id: "asc" } }),
   ]);
 
   const linhas: (string | number)[][] = [
@@ -55,10 +56,12 @@ export async function GET() {
   for (const m of meses) {
     const mes = m.mesReferencia;
 
-    // Uma linha por fonte de renda (ou o total, se o mês não tiver fontes)
+    // Rendas fixas do mês + uma linha por fonte avulsa (ou o total, se o mês não tiver fontes)
+    for (const r of contasDoMes(rendasFixas, mes)) add(mes, "Renda fixa", r.nome, r.valor);
+
     if (m.rendas.length > 0) {
       for (const r of m.rendas) add(mes, "Renda", r.nome, r.valor);
-    } else {
+    } else if (m.renda > 0) {
       add(mes, "Renda", "Renda do mês", m.renda);
     }
 

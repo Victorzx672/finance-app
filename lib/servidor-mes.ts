@@ -9,13 +9,14 @@ import { contasDoMes, parcelasDoMes, resumoDoMes, type MesSalvo } from "@/lib/re
  * Só roda no servidor (usa o banco).
  */
 export async function carregarResumoMes(userId: number, mes: string) {
-  const [finance, parcelamentos, contas] = await Promise.all([
+  const [finance, parcelamentos, contas, rendasFixas] = await Promise.all([
     prisma.financeData.findUnique({
       where: { userId_mesReferencia: { userId, mesReferencia: mes } },
       include: { gastos: true },
     }),
     prisma.parcelamento.findMany({ where: { userId } }),
     prisma.contaFixa.findMany({ where: { userId } }),
+    prisma.rendaFixa.findMany({ where: { userId } }),
   ]);
 
   const base: MesSalvo = finance ?? {
@@ -27,7 +28,7 @@ export async function carregarResumoMes(userId: number, mes: string) {
     gastos: [],
   };
 
-  const resumo = resumoDoMes(base, parcelamentos, contas);
+  const resumo = resumoDoMes(base, parcelamentos, contas, rendasFixas);
 
   const itens = [
     ...(finance?.gastos ?? []).map((g) => ({ valor: g.valor, categoria: g.categoria })),
@@ -63,9 +64,9 @@ export async function verificarAlertaLimite(userId: number, mes: string) {
     if (excedido && !finance.alertaEnviado && user.alertaEmail) {
       await enviarAlertaLimite(user.email, user.usuario, {
         mesLabel: labelMes(mes),
-        renda: finance.renda,
+        renda: resumo.renda,
         totalGastos: resumo.totalGastos,
-        limite: limiteDeGastos(finance.renda),
+        limite: limiteDeGastos(resumo.renda),
       });
 
       await prisma.financeData.update({ where: { id: finance.id }, data: { alertaEnviado: true } });

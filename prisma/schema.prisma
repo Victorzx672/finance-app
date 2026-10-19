@@ -20,16 +20,19 @@ model User {
   criadoEm        DateTime  @default(now())
 
   /// Avisa por e-mail quando os gastos do mês passam do limite (uma vez por mês).
-  alertaEmail Boolean @default(true)
+  alertaEmail   Boolean @default(true)
   /// Limite de gasto por categoria: { "Lazer": 300 }
-  orcamentos  Json    @default("{}")
+  orcamentos    Json    @default("{}")
   /// Dados dos cartões: { "Nubank": { "limite": 5000, "fechamento": 25, "vencimento": 5 } }
-  cartoes     Json    @default("{}")
+  cartoes       Json    @default("{}")
+  /// Dinheiro guardado que não está em nenhuma meta. O total guardado soma isto + as metas.
+  guardadoGeral Float   @default(0)
 
   finances      FinanceData[]
   tokens        TokenEmail[]
   parcelamentos Parcelamento[]
   contasFixas   ContaFixa[]
+  rendasFixas   RendaFixa[]
   pagamentos    Pagamento[]
   metas         Meta[]
 }
@@ -117,6 +120,22 @@ model ContaFixa {
   valor     Float
   dia       Int // dia do vencimento (1 a 31)
   categoria String?
+  mesInicio String // "AAAA-MM"
+  mesFim    String? // "AAAA-MM", nulo = sem fim
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Renda que se repete todo mês (salário...). Funciona como a conta fixa: vale de mesInicio até
+/// mesFim (sem mesFim = continua) e mudar o valor cria uma nova versão a partir do mês escolhido.
+/// A renda do mês = rendas fixas ativas + fontes de renda avulsas do mês (FonteRenda).
+model RendaFixa {
+  id        Int     @id @default(autoincrement())
+  nome      String
+  valor     Float
   mesInicio String // "AAAA-MM"
   mesFim    String? // "AAAA-MM", nulo = sem fim
 
