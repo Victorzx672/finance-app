@@ -24,6 +24,8 @@ Controle financeiro pessoal. Next.js + Prisma (PostgreSQL) + NextAuth.
 
 **Ano:** totais, média mensal, mês mais caro e quantos meses passaram do limite.
 
+**Dicas:** onde dá para gastar menos no mês (orçamento estourado, delivery, assinaturas, categorias pesadas, o que mais subiu, gastos fixos e parcelas), com quanto cada corte poderia liberar, e um guia **educativo** para guardar com segurança: ordem de prioridades (dívidas caras, reserva de emergência, metas com prazo) e comparação de opções de renda fixa de baixo risco (Tesouro Selic, CDB com liquidez diária, conta remunerada, LCI/LCA, Tesouro IPCA+/Prefixado, poupança). Não traz taxas nem é recomendação personalizada de investimento.
+
 **Preferências:** avisos por e-mail (limite de gastos e **lembrete diário** de contas e fatura que vencem hoje ou amanhã), pessoas, orçamento por categoria e dados do cartão (limite, fechamento, vencimento).
 
 **Conforto:** ocultar valores (olhinho), modo escuro, exportar tudo em CSV (Excel), enviar o resumo do mês por e-mail e instalar no celular (PWA).

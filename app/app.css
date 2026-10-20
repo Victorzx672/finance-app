@@ -1234,3 +1234,49 @@ button { -webkit-user-select: none; user-select: none; }
 .previsao--alerta .previsao-icone { background: var(--surface); color: var(--amber); }
 
 .oculto .previsao-texto p { filter: blur(7px); user-select: none; transition: filter 0.15s; }
+
+/* ══ Aba Dicas ═════════════════════════════════════════════ */
+
+.dicas-layout { display: flex; flex-direction: column; gap: 20px; }
+.dicas-corpo { padding: 0 22px 22px; display: flex; flex-direction: column; gap: 14px; }
+
+.dicas-resumo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 14px 16px; background: var(--green-soft); color: var(--green); border-radius: 10px; font-size: 14px; }
+.dicas-resumo strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+
+.dicas-lista { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.dica { padding: 14px 16px; border: 1px solid var(--border); border-left-width: 4px; border-radius: 10px; background: var(--surface); }
+.dica p { margin: 6px 0 0; line-height: 1.5; color: var(--muted); font-size: 14px; }
+.dica-topo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dica-tipo { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 99px; }
+.dica-economia { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--green); font-variant-numeric: tabular-nums; }
+.dica--cortar { border-left-color: var(--red); }
+.dica--cortar .dica-tipo { background: var(--red-soft); color: var(--red); }
+.dica--atencao { border-left-color: var(--amber); }
+.dica--atencao .dica-tipo { background: var(--amber-soft); color: var(--amber); }
+.dica--ok { border-left-color: var(--green); }
+.dica--ok .dica-tipo { background: var(--green-soft); color: var(--green); }
+
+.passos { list-style: none; margin: 0; padding: 0 22px 22px; display: flex; flex-direction: column; gap: 14px; }
+.passo { display: flex; gap: 12px; align-items: flex-start; }
+.passo p { margin: 2px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.passo-marca { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font-weight: 800; background: var(--surface2); color: var(--muted); }
+.passo--feito .passo-marca { background: var(--green-soft); color: var(--green); }
+.passo--pendente .passo-marca { background: var(--amber-soft); color: var(--amber); }
+
+.opcoes-grid { padding: 0 22px 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.opcao-card { padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.opcao-card h3 { font-size: 16px; font-weight: 700; }
+.opcao-para { color: var(--text); font-size: 14px; }
+.opcao-card dl { margin: 0; display: grid; grid-template-columns: 72px 1fr; gap: 4px 10px; font-size: 13px; }
+.opcao-card dt { color: var(--muted); font-weight: 700; }
+.opcao-card dd { margin: 0; line-height: 1.4; }
+.opcao-atencao { font-size: 13px; color: var(--amber); font-weight: 600; line-height: 1.4; }
+
+.aviso-educativo { margin: 14px 22px 22px; padding: 12px 14px; border-radius: 10px; background: var(--surface2); color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+@media (max-width: 760px) {
+  .dicas-corpo, .passos { padding-left: 16px; padding-right: 16px; }
+  .opcoes-grid { padding-left: 16px; padding-right: 16px; }
+  .aviso-educativo { margin-left: 16px; margin-right: 16px; }
+  .dicas-lista { grid-template-columns: 1fr; }
+}

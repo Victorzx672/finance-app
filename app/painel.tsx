@@ -14,7 +14,17 @@ import type { SaldoMes } from "@/lib/evolucao-guardado";
 import { FILTRO_VAZIO, type FiltroGastos } from "@/lib/filtro";
 import { gastosPorPessoa } from "@/lib/pessoas";
 import { chaveMes, faixaDeAnos, labelMes } from "@/lib/meses";
-import { faltaParaMeta, metaPrincipal, progressoMeta, totalGuardado, type MetaDinheiro } from "@/lib/metas";
+import { gerarDicas } from "@/lib/dicas";
+import { passosParaGuardar } from "@/lib/investimentos";
+import {
+  MESES_RESERVA_IDEAL,
+  faltaParaMeta,
+  mesesDeReserva,
+  metaPrincipal,
+  progressoMeta,
+  totalGuardado,
+  type MetaDinheiro,
+} from "@/lib/metas";
 import { somarMes } from "@/lib/parcelas";
 import { serializarMes } from "@/lib/payload-mes";
 import { preverMes } from "@/lib/previsao";
@@ -45,6 +55,7 @@ import {
 } from "./dados";
 import { FontesRenda, novaFonte, type FonteRenda } from "./fontes-renda";
 import { PainelCategorias, PainelEvolucao, PainelEvolucaoGuardado, PainelPessoas, PainelProjecao } from "./graficos";
+import { PainelDicas } from "./dicas";
 import { AcaoGuardar, CartaoGuardado } from "./guardado";
 import { ImportarFatura, type ItemImportado } from "./importar-fatura";
 import { Lancamentos } from "./lancamentos";
@@ -68,6 +79,7 @@ const ABAS = [
   { id: "mes", rotulo: "Este mês" },
   { id: "metas", rotulo: "Metas" },
   { id: "ano", rotulo: "Ano" },
+  { id: "dicas", rotulo: "Dicas" },
   { id: "prefs", rotulo: "Preferências" },
 ] as const;
 
@@ -283,6 +295,28 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
   const sugestao = mesVazio && anterior?.mes === mesSelecionado ? anterior.dados : null;
   const dadosComparativo = comparativo?.mes === mesSelecionado ? comparativo.dados : undefined;
+
+  // Aba Dicas: onde cortar (com os números do mês) e o guia de guardar com segurança
+  const dicas = gerarDicas({
+    renda,
+    totalGastos,
+    categorias: agruparPorCategoria([...todosGastos, ...contas], gastosFixos, gastosVariaveis),
+    orcamentos: prefs.orcamentos,
+    anterior: dadosComparativo ?? null,
+    compras: todosGastos,
+    assinaturas: [...todosGastos, ...contas].filter((i) => i.categoria === "Assinaturas"),
+    gastosFixos: gastosFixos + totalContas,
+    parcelasDoMes: somar(parcelas),
+    limiteCartao: configCartao?.limite ?? null,
+    usadoCartao: totalNubank,
+  });
+
+  const passos = passosParaGuardar({
+    mesesDeReserva: mesesDeReserva(metas, totalGastos),
+    mesesIdeais: MESES_RESERVA_IDEAL,
+    temMetaDeReserva: metas.some((m) => m.reserva),
+    saldoDoMes: saldo,
+  });
 
   // ── Carregamento ────────────────────────────────────────────────────────────
   // Os fetches são puros (ver dados.ts). O resultado só é aplicado depois do
@@ -989,6 +1023,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
         {aba === "metas" && <PainelEvolucaoGuardado saldos={saldos} mesAtual={MES_ATUAL} escuro={escuro} />}
 
         {aba === "ano" && <PainelAno historico={historico} anoAtual={ANO_ATUAL} />}
+
+        {aba === "dicas" && (
+          <PainelDicas mesLabel={labelMes(mesSelecionado)} dicas={dicas} totalGastos={totalGastos} passos={passos} />
+        )}
 
         {aba === "prefs" &&
           (prefsCarregadas ? (
