@@ -5,7 +5,9 @@ import { LIMITE_GASTOS_PERCENT, passouDoLimite } from "@/lib/calculos";
 import { anosDisponiveis, resumoDoAno } from "@/lib/ano";
 import { labelMes } from "@/lib/meses";
 import type { HistoricoMes } from "./dados";
-import { fmt } from "./ui";
+import { IconeAlerta, IconeCalendario, IconeCarteira, IconeTendencia } from "./icones";
+import { Kpi } from "./kpi";
+import { Vazio, fmt } from "./ui";
 
 /** Visão do ano: totais, média mensal, mês mais caro e quantos meses passaram do limite. */
 export function PainelAno({ historico, anoAtual }: { historico: HistoricoMes[]; anoAtual: number }) {
@@ -17,16 +19,13 @@ export function PainelAno({ historico, anoAtual }: { historico: HistoricoMes[]; 
 
   return (
     <div className="ano-layout">
-      <section className="card month-bar">
-        <div className="month-picker">
-          <span className="month-label">Ano</span>
-          <select className="month-select" value={ano} onChange={(e) => setAno(Number(e.target.value))} aria-label="Ano">
-            {anos.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
+      <section className="ano-barra-topo">
+        <div className="segmentos segmentos--compacto" role="radiogroup" aria-label="Ano">
+          {anos.map((a) => (
+            <button key={a} role="radio" aria-checked={ano === a} className="segmento" onClick={() => setAno(a)}>
+              {a}
+            </button>
+          ))}
         </div>
 
         <p className="ano-nota">
@@ -36,52 +35,61 @@ export function PainelAno({ historico, anoAtual }: { historico: HistoricoMes[]; 
 
       {r.meses.length === 0 ? (
         <section className="card">
-          <div className="empty-state">Nenhum mês salvo em {ano}.</div>
+          <Vazio texto={`Nenhum mês salvo em ${ano}.`} />
         </section>
       ) : (
         <>
           <div className="cards-grid">
-            <div className="card summary-card summary-card--blue">
-              <span className="summary-label">Renda do ano</span>
-              <span className="summary-value">{fmt(r.rendaTotal)}</span>
-              <span className="summary-sub">Soma dos meses salvos</span>
-            </div>
+            <Kpi
+              rotulo="Renda do ano"
+              valor={r.rendaTotal}
+              cor="blue"
+              icone={<IconeTendencia size={19} />}
+              sub="Soma dos meses salvos"
+            />
 
-            <div className="card summary-card summary-card--amber">
-              <span className="summary-label">Gastos do ano</span>
-              <span className="summary-value">{fmt(r.gastosTotal)}</span>
-              <span className="summary-sub">
-                {r.percentualMedio.toFixed(0)}% da renda, média de {fmt(r.mediaGastos)} por mês
-              </span>
-            </div>
+            <Kpi
+              rotulo="Gastos do ano"
+              valor={r.gastosTotal}
+              cor="amber"
+              icone={<IconeCarteira size={19} />}
+              progresso={r.percentualMedio}
+              sub={`${r.percentualMedio.toFixed(0)}% da renda, média de ${fmt(r.mediaGastos)} por mês`}
+            />
 
-            <div className={`card summary-card summary-card--${r.saldoTotal >= 0 ? "green" : "red"}`}>
-              <span className="summary-label">Sobrou no ano</span>
-              <span className="summary-value">{fmt(r.saldoTotal)}</span>
-              <span className="summary-sub">Renda menos todos os gastos</span>
-            </div>
+            <Kpi
+              rotulo="Sobrou no ano"
+              valor={r.saldoTotal}
+              cor={r.saldoTotal >= 0 ? "green" : "red"}
+              icone={<IconeCarteira size={19} />}
+              sub="Renda menos todos os gastos"
+            />
 
-            <div className="card summary-card summary-card--purple">
-              <span className="summary-label">Mês mais caro</span>
-              <span className="summary-value">{r.mesMaisCaro ? fmt(r.mesMaisCaro.totalGastos) : "—"}</span>
-              <span className="summary-sub">{r.mesMaisCaro ? labelMes(r.mesMaisCaro.mesReferencia) : ""}</span>
-            </div>
+            <Kpi
+              rotulo="Mês mais caro"
+              valor={r.mesMaisCaro ? r.mesMaisCaro.totalGastos : "—"}
+              cor="purple"
+              icone={<IconeCalendario size={19} />}
+              sub={r.mesMaisCaro ? labelMes(r.mesMaisCaro.mesReferencia) : ""}
+            />
 
-            <div className={`card summary-card summary-card--${r.mesesAcimaDoLimite > 0 ? "red" : "green"}`}>
-              <span className="summary-label">Acima de {LIMITE_GASTOS_PERCENT}% da renda</span>
-              <span className="summary-value">
-                {r.mesesAcimaDoLimite} de {r.meses.length}
-              </span>
-              <span className="summary-sub">
-                {r.mesesAcimaDoLimite === 0 ? "Nenhum mês passou do limite" : "meses que passaram do limite"}
-              </span>
-            </div>
+            <Kpi
+              rotulo={`Acima de ${LIMITE_GASTOS_PERCENT}% da renda`}
+              valor={`${r.mesesAcimaDoLimite} de ${r.meses.length}`}
+              cor={r.mesesAcimaDoLimite > 0 ? "red" : "green"}
+              icone={<IconeAlerta size={19} />}
+              sub={r.mesesAcimaDoLimite === 0 ? "Nenhum mês passou do limite" : "meses que passaram do limite"}
+            />
           </div>
 
           <section className="card">
             <div className="panel-head">
               <h2 className="panel-title">Mês a mês em {ano}</h2>
-              <p className="panel-sub">Renda (azul) e gastos (laranja) de cada mês.</p>
+              <p className="panel-sub ano-legenda">
+                <span className="ano-legenda-item ano-legenda-item--renda">Renda</span>
+                <span className="ano-legenda-item ano-legenda-item--gasto">Gastos</span>
+                <span className="ano-legenda-item ano-legenda-item--alerta">Acima do limite</span>
+              </p>
             </div>
 
             <ul className="ano-lista">

@@ -13,7 +13,10 @@ import {
   totalNaReserva,
   type MetaDinheiro,
 } from "@/lib/metas";
-import { Icon, fmt, numero } from "./ui";
+import { centroDe, soltarConfete } from "./confete";
+import { IconeEscudo, IconeLapis, IconeX } from "./icones";
+import { Anel } from "./medidor";
+import { Vazio, fmt, numero } from "./ui";
 
 export interface DadosMeta {
   nome: string;
@@ -35,15 +38,20 @@ function CartaoReserva({
   const temReserva = metas.some((m) => m.reserva);
   const meses = mesesDeReserva(metas, gastosMensais);
   const percentual = Math.min(100, (meses / MESES_RESERVA_IDEAL) * 100);
-  const classe = meses >= MESES_RESERVA_IDEAL ? "ok" : meses >= 3 ? "warning" : "danger";
+  const classe = meses >= MESES_RESERVA_IDEAL ? "ok" : meses >= 3 ? "atencao" : "excedido";
 
   return (
     <section className="card reserva-card">
-      <div className="panel-head">
-        <h2 className="panel-title">Reserva de emergência</h2>
-        <p className="panel-sub">
-          O ideal é guardar o equivalente a {MESES_RESERVA_IDEAL} meses de gastos para imprevistos.
-        </p>
+      <div className="panel-head panel-head--icone">
+        <span className="panel-icone panel-icone--teal" aria-hidden="true">
+          <IconeEscudo size={20} />
+        </span>
+        <div>
+          <h2 className="panel-title">Reserva de emergência</h2>
+          <p className="panel-sub">
+            O ideal é guardar o equivalente a {MESES_RESERVA_IDEAL} meses de gastos para imprevistos.
+          </p>
+        </div>
       </div>
 
       <div className="reserva-corpo">
@@ -60,22 +68,23 @@ function CartaoReserva({
             </button>
           </>
         ) : (
-          <>
-            <div className="spend-head">
+          <div className="reserva-resumo">
+            <Anel percentual={percentual} status={classe} tamanho={112}>
+              <strong className="anel-valor">{meses.toFixed(1).replace(".", ",")}</strong>
+              <span className="anel-rotulo">de {MESES_RESERVA_IDEAL} meses</span>
+            </Anel>
+            <div className="reserva-textos">
               <span>
-                Guardado na reserva: <b>{fmt(totalNaReserva(metas))}</b> (gastos do mês: {fmt(gastosMensais)})
+                Guardado na reserva: <b>{fmt(totalNaReserva(metas))}</b>
               </span>
-              <strong>{meses.toFixed(1).replace(".", ",")} de {MESES_RESERVA_IDEAL} meses</strong>
+              <span className="field-hint">Gastos do mês: {fmt(gastosMensais)}</span>
+              <span className={`spend-note spend-note--${classe}`}>
+                {meses >= MESES_RESERVA_IDEAL
+                  ? "Reserva completa. Parabéns!"
+                  : `Faltam ${fmt(Math.max(0, alvoReservaSugerido(gastosMensais) - totalNaReserva(metas)))} para chegar a ${MESES_RESERVA_IDEAL} meses.`}
+              </span>
             </div>
-            <div className="spend-track">
-              <div className={`spend-fill ${classe}`} style={{ width: `${percentual}%` }} />
-            </div>
-            <span className={`spend-note spend-note--${meses >= MESES_RESERVA_IDEAL ? "ok" : meses >= 3 ? "atencao" : "excedido"}`}>
-              {meses >= MESES_RESERVA_IDEAL
-                ? "Reserva completa. Parabéns!"
-                : `Faltam ${fmt(Math.max(0, alvoReservaSugerido(gastosMensais) - totalNaReserva(metas)))} para chegar a ${MESES_RESERVA_IDEAL} meses.`}
-            </span>
-          </>
+          </div>
         )}
       </div>
     </section>
@@ -110,14 +119,19 @@ function CartaoMeta({
   const falta = faltaParaMeta(meta);
   const prazo = !concluida && investimento > 0 ? mesesAteMeta(investimento, falta) : 0;
 
-  const movimentar = async (sinal: 1 | -1) => {
+  const movimentar = async (sinal: 1 | -1, botao: HTMLElement) => {
     if (aporte <= 0) return;
 
     setErro("");
+    const origem = centroDe(botao);
     const falha = await onAporte(meta, sinal * aporte);
 
     if (falha) setErro(falha);
-    else setAporte(0);
+    else {
+      setAporte(0);
+      // este depósito completou a meta: comemora
+      if (sinal === 1 && !concluida && meta.guardado + aporte >= meta.alvo) soltarConfete(origem, 140);
+    }
   };
 
   const salvar = async () => {
@@ -147,36 +161,31 @@ function CartaoMeta({
 
         <div className="meta-acoes">
           <button className="btn-icon" onClick={() => setEditando((v) => !v)} aria-label={`Editar ${meta.nome}`} title="Editar">
-            <Icon size={16}>
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </Icon>
+            <IconeLapis size={16} />
           </button>
           <button className="btn-icon btn-icon--danger" onClick={() => onRemover(meta)} aria-label={`Remover ${meta.nome}`} title="Remover">
-            <Icon size={16}>
-              <path d="M18 6L6 18M6 6l12 12" />
-            </Icon>
+            <IconeX size={16} />
           </button>
         </div>
       </div>
 
-      <div className="spend-head">
-        <span>
-          {fmt(meta.guardado)} de {fmt(meta.alvo)}
-        </span>
-        <strong>{progressoMeta(meta).toFixed(0)}%</strong>
-      </div>
-      <div className="spend-track">
-        <div className={`spend-fill ${concluida ? "ok" : "azul"}`} style={{ width: `${progressoMeta(meta)}%` }} />
-      </div>
+      <div className="meta-progresso">
+        <Anel percentual={progressoMeta(meta)} status={concluida ? "ok" : "azul"} tamanho={84}>
+          <strong className="anel-valor anel-valor--pequeno">{progressoMeta(meta).toFixed(0)}%</strong>
+        </Anel>
 
-      <p className="meta-prazo">
-        {concluida
-          ? "Meta atingida!"
-          : prazo > 0
-          ? `Faltam ${fmt(falta)}. No ritmo atual (${fmt(investimento)}/mês), cerca de ${prazo} ${prazo === 1 ? "mês" : "meses"}.`
-          : `Faltam ${fmt(falta)}.`}
-      </p>
+        <div className="meta-numeros">
+          <span className="meta-guardado">{fmt(meta.guardado)}</span>
+          <span className="meta-alvo">de {fmt(meta.alvo)}</span>
+          <p className="meta-prazo">
+            {concluida
+              ? "Meta atingida!"
+              : prazo > 0
+              ? `Faltam ${fmt(falta)}. No ritmo atual (${fmt(investimento)}/mês), cerca de ${prazo} ${prazo === 1 ? "mês" : "meses"}.`
+              : `Faltam ${fmt(falta)}.`}
+          </p>
+        </div>
+      </div>
 
       {editando ? (
         <div className="meta-edicao">
@@ -238,10 +247,10 @@ function CartaoMeta({
               onChange={(e) => setAporte(numero(e.target.value))}
             />
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => movimentar(1)}>
+          <button className="btn btn-primary btn-sm" onClick={(e) => movimentar(1, e.currentTarget)}>
             Guardar
           </button>
-          <button className="btn btn-outline btn-sm" onClick={() => movimentar(-1)}>
+          <button className="btn btn-outline btn-sm" onClick={(e) => movimentar(-1, e.currentTarget)}>
             Retirar
           </button>
         </div>
@@ -366,7 +375,7 @@ export function PainelMetas({
         </div>
 
         {metas.length === 0 ? (
-          <div className="empty-state">Nenhuma meta ainda. Crie a primeira acima.</div>
+          <Vazio texto="Nenhuma meta ainda. Crie a primeira acima." />
         ) : (
           <div className="metas-lista">
             {metas.map((m) => (

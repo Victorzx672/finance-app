@@ -1,6 +1,7 @@
 "use client";
 
-import { Icon, fmt, numero } from "./ui";
+import { IconeX } from "./icones";
+import { fmt, numero } from "./ui";
 
 export interface FonteRenda {
   id: string | number;
@@ -78,9 +79,7 @@ export function FontesRenda({
                 aria-label={`Remover renda extra ${i + 1}`}
                 title="Remover"
               >
-                <Icon size={16}>
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </Icon>
+                <IconeX size={16} />
               </button>
             </div>
           ))}

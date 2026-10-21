@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { categoriasAprendidas, interpretarFatura, type LinhaFatura, type ResultadoFatura } from "@/lib/fatura";
+import { IconeUpload } from "./icones";
 import { SelectCategoria, SelectPessoa } from "./lista-gastos";
+import { Modal } from "./modal";
 import { fmt } from "./ui";
 
 export interface ItemImportado extends Omit<LinhaFatura, "categoria"> {
@@ -34,6 +36,7 @@ export function ImportarFatura({
   const [pessoa, setPessoa] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [arrastando, setArrastando] = useState(false);
 
   const fechar = () => {
     setAberto(false);
@@ -99,96 +102,121 @@ export function ImportarFatura({
   return (
     <>
       <button className="btn btn-outline btn-sm importar-btn" onClick={() => setAberto(true)}>
+        <IconeUpload size={16} />
         Importar fatura (CSV)
       </button>
 
       {aberto && (
-        <div className="modal-fundo" role="presentation" onClick={fechar}>
-          <div
-            className="modal modal--larga"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="importar-titulo"
-            onClick={(e) => e.stopPropagation()}
+        <Modal
+          titulo="Importar fatura do cartão"
+          descricao={
+            <>
+              Use o arquivo CSV da fatura (no app do Nubank: fatura → exportar). As compras entram em{" "}
+              <strong>
+                {mes.slice(5, 7)}/{mes.slice(0, 4)}
+              </strong>{" "}
+              como alterações do mês: depois é só conferir e clicar em Salvar.
+            </>
+          }
+          onFechar={fechar}
+          larga
+        >
+          <label
+            className={`soltar-arquivo ${arrastando ? "soltar-arquivo--ativo" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setArrastando(true);
+            }}
+            onDragLeave={() => setArrastando(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setArrastando(false);
+              lerArquivo(e.dataTransfer.files?.[0]);
+            }}
           >
-            <h2 id="importar-titulo">Importar fatura do cartão</h2>
-            <p>
-              Escolha o arquivo CSV da fatura (no app do Nubank: fatura → exportar). As compras entram em{" "}
-              <strong>{mes.slice(5, 7)}/{mes.slice(0, 4)}</strong> como alterações do mês: depois é só conferir e clicar
-              em Salvar.
-            </p>
-
+            <IconeUpload size={22} />
+            <span>
+              {nomeArquivo ? (
+                <>
+                  <strong>{nomeArquivo}</strong> · escolher outro
+                </>
+              ) : (
+                <>
+                  <strong>Escolha o arquivo</strong> ou arraste aqui
+                </>
+              )}
+            </span>
             <input
               type="file"
               accept=".csv,text/csv,text/plain"
               aria-label="Arquivo CSV da fatura"
               onChange={(e) => lerArquivo(e.target.files?.[0])}
             />
+          </label>
 
-            {erro && <p className="auth-msg error">{erro}</p>}
+          {erro && <p className="auth-msg error">{erro}</p>}
 
-            {resultado && linhas.length > 0 && (
-              <>
-                <p className="field-hint importar-resumo">
-                  {nomeArquivo}: {linhas.length} compras encontradas
-                  {resultado.ignoradas > 0 && `, ${resultado.ignoradas} linhas ignoradas (pagamentos e estornos)`}
-                  {jaLancadas > 0 && `, ${jaLancadas} já lançadas neste mês (desmarcadas)`}.
-                </p>
+          {resultado && linhas.length > 0 && (
+            <>
+              <p className="field-hint importar-resumo">
+                {linhas.length} compras encontradas
+                {resultado.ignoradas > 0 && `, ${resultado.ignoradas} linhas ignoradas (pagamentos e estornos)`}
+                {jaLancadas > 0 && `, ${jaLancadas} já lançadas neste mês (desmarcadas)`}.
+              </p>
 
-                {pessoas.length > 0 && (
-                  <SelectPessoa value={pessoa} onChange={setPessoa} pessoas={pessoas} rotulo="Quem gastou (todas as compras)" />
-                )}
+              {pessoas.length > 0 && (
+                <SelectPessoa value={pessoa} onChange={setPessoa} pessoas={pessoas} rotulo="Quem gastou (todas as compras)" />
+              )}
 
-                <ul className="importar-lista">
-                  {linhas.map((l) => (
-                    <li key={l.id} className={`importar-linha ${marcadas.has(l.id) ? "" : "importar-linha--off"}`}>
-                      <input
-                        type="checkbox"
-                        checked={marcadas.has(l.id)}
-                        onChange={() => alternar(l.id)}
-                        aria-label={`Importar ${l.nome}`}
-                      />
+              <ul className="importar-lista">
+                {linhas.map((l) => (
+                  <li key={l.id} className={`importar-linha ${marcadas.has(l.id) ? "" : "importar-linha--off"}`}>
+                    <input
+                      type="checkbox"
+                      checked={marcadas.has(l.id)}
+                      onChange={() => alternar(l.id)}
+                      aria-label={`Importar ${l.nome}`}
+                    />
 
-                      <span className="linha-data">{l.dia ? String(l.dia).padStart(2, "0") : "—"}</span>
+                    <span className="linha-data">{l.dia ? String(l.dia).padStart(2, "0") : "—"}</span>
 
-                      <span className="linha-nome" title={l.nome}>
-                        <span className="linha-texto">{l.nome}</span>
-                        {l.parcela && (
-                          <span className="expense-badge">
-                            {l.parcela.atual}/{l.parcela.total}
-                          </span>
-                        )}
-                        {l.jaLancada && <span className="expense-tag">já lançada</span>}
-                      </span>
+                    <span className="linha-nome" title={l.nome}>
+                      <span className="linha-texto">{l.nome}</span>
+                      {l.parcela && (
+                        <span className="expense-badge">
+                          {l.parcela.atual}/{l.parcela.total}
+                        </span>
+                      )}
+                      {l.jaLancada && <span className="expense-tag">já lançada</span>}
+                    </span>
 
-                      <SelectCategoria
-                        value={categorias[l.id] ?? ""}
-                        onChange={(v) => setCategorias((c) => ({ ...c, [l.id]: v }))}
-                        rotulo={`Categoria de ${l.nome}`}
-                      />
+                    <SelectCategoria
+                      value={categorias[l.id] ?? ""}
+                      onChange={(v) => setCategorias((c) => ({ ...c, [l.id]: v }))}
+                      rotulo={`Categoria de ${l.nome}`}
+                    />
 
-                      <span className="expense-value linha-valor">{fmt(l.valor)}</span>
-                    </li>
-                  ))}
-                </ul>
+                    <span className="expense-value linha-valor">{fmt(l.valor)}</span>
+                  </li>
+                ))}
+              </ul>
 
-                <p className="field-hint">
-                  Compras parceladas (ex.: parcela 3/10) são cadastradas como parceladas e aparecem nos próximos meses
-                  sozinhas.
-                </p>
-              </>
-            )}
+              <p className="field-hint">
+                Compras parceladas (ex.: parcela 3/10) são cadastradas como parceladas e aparecem nos próximos meses
+                sozinhas.
+              </p>
+            </>
+          )}
 
-            <div className="modal-acoes">
-              <button className="btn btn-primary" disabled={enviando || escolhidas.length === 0} onClick={importar}>
-                {enviando ? "Importando..." : `Importar ${escolhidas.length} compras (${fmt(total)})`}
-              </button>
-              <button className="link-btn center" onClick={fechar}>
-                Cancelar
-              </button>
-            </div>
+          <div className="modal-acoes modal-acoes--linha">
+            <button className="btn btn-outline" onClick={fechar}>
+              Cancelar
+            </button>
+            <button className="btn btn-primary" disabled={enviando || escolhidas.length === 0} onClick={importar}>
+              {enviando ? "Importando..." : `Importar ${escolhidas.length} compras (${fmt(total)})`}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </>
   );

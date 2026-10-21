@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { NOME_APP } from "@/lib/app";
+import { flushSync } from "react-dom";
 import {
   LIMITE_GASTOS_PERCENT,
   agruparPorCategoria,
   calcularResumo,
   passouDoLimite,
   somar,
-  type StatusLimite,
 } from "@/lib/calculos";
-import type { SaldoMes } from "@/lib/evolucao-guardado";
+import { serieGuardado, type SaldoMes } from "@/lib/evolucao-guardado";
 import { FILTRO_VAZIO, type FiltroGastos } from "@/lib/filtro";
 import { gastosPorPessoa } from "@/lib/pessoas";
-import { chaveMes, faixaDeAnos, labelMes } from "@/lib/meses";
+import { anoDe, chaveMes, faixaDeAnos, labelCurto, labelMes } from "@/lib/meses";
 import { gerarDicas } from "@/lib/dicas";
 import { passosParaGuardar } from "@/lib/investimentos";
 import {
@@ -26,9 +25,11 @@ import {
   type MetaDinheiro,
 } from "@/lib/metas";
 import { somarMes } from "@/lib/parcelas";
-import { serializarMes } from "@/lib/payload-mes";
+import { serializarMes, type DadosDoMes } from "@/lib/payload-mes";
 import { preverMes } from "@/lib/previsao";
-import { diasAteVencimento, pedeAtencao, situacaoConta } from "@/lib/vencimentos";
+import { diasAteVencimento, pedeAtencao, situacaoConta, ultimoDiaDoMes } from "@/lib/vencimentos";
+import { reduzMovimento } from "./animacao";
+import { JanelaAtalhos, digitando } from "./atalhos";
 import { AvisoLimite } from "./aviso-limite";
 import { PrevisaoMes } from "./previsao-mes";
 import { AvisoVencimentos, type ItemVencimento } from "./aviso-vencimentos";
@@ -57,37 +58,53 @@ import { FontesRenda, novaFonte, type FonteRenda } from "./fontes-renda";
 import { PainelCategorias, PainelEvolucao, PainelEvolucaoGuardado, PainelPessoas, PainelProjecao } from "./graficos";
 import { PainelDicas } from "./dicas";
 import { AcaoGuardar, CartaoGuardado } from "./guardado";
+import {
+  IconeAlerta,
+  IconeAlvo,
+  IconeCalendario,
+  IconeCarteira,
+  IconeCheck,
+  IconeLua,
+  IconeMais,
+  IconeOlho,
+  IconeRelogio,
+  IconeSol,
+  IconeTendencia,
+  IconeX,
+} from "./icones";
 import { ImportarFatura, type ItemImportado } from "./importar-fatura";
+import { Kpi } from "./kpi";
 import { Lancamentos } from "./lancamentos";
 import { ListaGastos, type EdicaoGasto } from "./lista-gastos";
+import { CartaoLimite } from "./medidor";
+import { Modal, useConfirmacao } from "./modal";
 import { PainelMetas, type DadosMeta } from "./metas";
+import { ABAS, BarraInferior, BarraLateral, Marca, MenuUsuario, type Aba } from "./navegacao";
+import { NovoGasto, type NovoGastoDados } from "./novo-gasto";
 import { PainelPreferencias } from "./preferencias";
 import { RendasFixas, type EdicaoRendaFixa } from "./rendas-fixas";
 import { PainelAno } from "./resumo-ano";
 import { SeletorMes } from "./seletor-mes";
-import { Icon, InputField, LogoIcon, fmt, numero, type Gasto } from "./ui";
-
-/** Cor da barra de gastos conforme a situação do limite. */
-const CLASSE_BARRA: Record<StatusLimite, string> = {
-  ok: "ok",
-  atencao: "warning",
-  excedido: "danger",
-  "sem-renda": "warning",
-};
-
-const ABAS = [
-  { id: "mes", rotulo: "Este mês" },
-  { id: "metas", rotulo: "Metas" },
-  { id: "ano", rotulo: "Ano" },
-  { id: "dicas", rotulo: "Dicas" },
-  { id: "prefs", rotulo: "Preferências" },
-] as const;
-
-type Aba = (typeof ABAS)[number]["id"];
+import { InputField, fmt, numero, type Gasto } from "./ui";
 
 const MES_ATUAL = chaveMes(new Date());
 const ANO_ATUAL = new Date().getFullYear();
 const CARTAO = "Nubank";
+
+/** Atalhos de porcentagem a investir. */
+const PERCENTUAIS_RAPIDOS = [10, 20, 30, 50];
+
+const SUBTITULO_ABA: Record<Exclude<Aba, "mes">, string> = {
+  metas: "Quanto você já guardou e o que falta para cada objetivo.",
+  ano: "Como foi o ano, mês a mês.",
+  dicas: "Onde dá para gastar menos e como guardar com segurança.",
+  prefs: "Avisos, pessoas, orçamentos e dados do cartão.",
+};
+
+const saudacao = () => {
+  const h = new Date().getHours();
+  return h < 5 ? "Boa noite" : h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+};
 
 const lerArmazenado = (chave: string) => {
   try {
@@ -105,54 +122,27 @@ const gravarArmazenado = (chave: string, valor: string) => {
   }
 };
 
-function SummaryCard({
-  label,
-  value,
-  accent,
-  icon,
-  sub,
-  acao,
-}: {
-  label: string;
-  value: string;
-  accent: "green" | "red" | "blue" | "amber" | "purple" | "teal";
-  icon: React.ReactNode;
-  sub: string;
-  /** botão ou aviso extra no rodapé do cartão */
-  acao?: React.ReactNode;
-}) {
-  return (
-    <div className={`card summary-card summary-card--${accent}`}>
-      <div className="summary-icon">{icon}</div>
-      <span className="summary-label">{label}</span>
-      <span className="summary-value">{value}</span>
-      <span className="summary-sub">{sub}</span>
-      {acao && <div className="summary-acao">{acao}</div>}
-    </div>
-  );
-}
-
-function BotaoIcone({
+function BotaoTopo({
   titulo,
   onClick,
-  href,
   ativo,
+  classe = "",
   children,
 }: {
   titulo: string;
-  onClick?: () => void;
-  href?: string;
+  onClick: () => void;
   ativo?: boolean;
+  classe?: string;
   children: React.ReactNode;
 }) {
-  const classe = `btn-topo ${ativo ? "btn-topo--ativo" : ""}`;
-
-  return href ? (
-    <a href={href} className={classe} title={titulo} aria-label={titulo} download>
-      {children}
-    </a>
-  ) : (
-    <button className={classe} title={titulo} aria-label={titulo} onClick={onClick}>
+  return (
+    <button
+      className={`btn-topo ${ativo ? "btn-topo--ativo" : ""} ${classe}`}
+      title={titulo}
+      aria-label={titulo}
+      aria-pressed={ativo}
+      onClick={onClick}
+    >
       {children}
     </button>
   );
@@ -190,13 +180,17 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const [aba, setAba] = useState<Aba>("mes");
   const [filtro, setFiltro] = useState<FiltroGastos>(FILTRO_VAZIO);
   const [salvando, setSalvando] = useState(false);
-  const [aviso, setAviso] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [aviso, setAviso] = useState<{ id: number; tipo: "ok" | "error"; texto: string } | null>(null);
   const [anterior, setAnterior] = useState<{ mes: string; dados: FinancaDoMes } | null>(null);
   const [comparativo, setComparativo] = useState<{ mes: string; dados: GastosDoMes | null } | null>(null);
+  const [novoGasto, setNovoGasto] = useState(false);
+  const [atalhos, setAtalhos] = useState(false);
   const [ocultar, setOcultar] = useState(() => lerArmazenado("fluxopay-ocultar") === "1");
   const [escuro, setEscuro] = useState(
     () => typeof document !== "undefined" && document.documentElement.dataset.tema === "escuro"
   );
+
+  const { confirmar, dialogo } = useConfirmacao();
 
   const ehMesAtual = mesSelecionado === MES_ATUAL;
 
@@ -317,6 +311,12 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     temMetaDeReserva: metas.some((m) => m.reserva),
     saldoDoMes: saldo,
   });
+
+  // "Livre para gastar" dividido pelos dias que faltam (só no mês em andamento)
+  const diasRestantes = ehMesAtual ? ultimoDiaDoMes(mesSelecionado) - new Date().getDate() + 1 : 0;
+  const livrePorDia = diasRestantes > 0 && livre > 0 ? livre / diasRestantes : 0;
+
+  const serieTotalGuardado = serieGuardado(saldos, MES_ATUAL);
 
   // ── Carregamento ────────────────────────────────────────────────────────────
   // Os fetches são puros (ver dados.ts). O resultado só é aplicado depois do
@@ -446,8 +446,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   // ── Ações ───────────────────────────────────────────────────────────────────
 
   const mostrarAviso = (tipo: "ok" | "error", texto: string, duracaoMs = 6000) => {
-    setAviso({ tipo, texto });
-    setTimeout(() => setAviso(null), duracaoMs);
+    const id = Date.now();
+    setAviso({ id, tipo, texto });
+    // só some se ainda for o mesmo aviso (um novo aviso não é apagado pelo timer do anterior)
+    setTimeout(() => setAviso((atual) => (atual?.id === id ? null : atual)), duracaoMs);
   };
 
   // ── Salvar (manual) ─────────────────────────────────────────────────────────
@@ -486,6 +488,29 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     }
   };
 
+  /** Volta o mês para como estava no último salvamento. */
+  const descartar = async () => {
+    if (!salvoJson) return;
+
+    const ok = await confirmar({
+      titulo: "Descartar as alterações?",
+      texto: `Os dados de ${labelMes(mesSelecionado)} voltam a ficar como estavam no último salvamento.`,
+      botao: "Descartar",
+      perigo: true,
+    });
+    if (!ok) return;
+
+    const salvo = JSON.parse(salvoJson) as DadosDoMes;
+    // uma extra que virou fixa ("Tornar fixa") não volta, senão contaria duas vezes
+    const extras = salvo.rendas.filter((r) => !rendasFixas.some((f) => f.nome === r.nome && f.valor === r.valor));
+    setRendas(extras.map((r) => ({ ...r, id: crypto.randomUUID() })));
+    setGastosFixos(salvo.gastosFixos);
+    setGastosVariaveis(salvo.gastosVariaveis);
+    setPercentualInvestimento(salvo.percentualInvestimento);
+    setGastos(salvo.gastos.map((g) => ({ ...g, id: crypto.randomUUID() })));
+    mostrarAviso("ok", "Alterações descartadas.", 2500);
+  };
+
   // Fechar a aba, recarregar ou voltar com alterações não salvas: o navegador avisa
   useEffect(() => {
     if (!alterado) return;
@@ -499,19 +524,6 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     return () => window.removeEventListener("beforeunload", avisar);
   }, [alterado]);
 
-  // Ctrl+S (ou Cmd+S) salva
-  useEffect(() => {
-    const aoTeclar = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        if (alterado) salvar();
-      }
-    };
-
-    window.addEventListener("keydown", aoTeclar);
-    return () => window.removeEventListener("keydown", aoTeclar);
-  });
-
   /** Executa a ação já, ou pergunta antes se há alterações não salvas. */
   const protegerSaida = (rotulo: string, acao: () => void) => {
     if (alterado) setPendente({ rotulo, acao });
@@ -523,6 +535,11 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   };
 
   const pedirSaida = () => protegerSaida("sair", onSair);
+
+  const irParaAba = (nova: Aba) => {
+    setAba(nova);
+    window.scrollTo({ top: 0, behavior: reduzMovimento() ? "auto" : "smooth" });
+  };
 
   const salvarEContinuar = async () => {
     if (!pendente) return;
@@ -546,6 +563,58 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     gravarArmazenado("fluxopay-ocultar", ocultar ? "0" : "1");
     setOcultar(!ocultar);
   };
+
+  /** Troca o tema com uma transição suave (onde o navegador permite). */
+  const alternarTema = () => {
+    const trocar = () =>
+      flushSync(() => {
+        document.documentElement.dataset.tema = escuro ? "claro" : "escuro";
+        setEscuro(!escuro);
+      });
+
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+
+    if (doc.startViewTransition && !reduzMovimento()) doc.startViewTransition(trocar);
+    else trocar();
+  };
+
+  const abrirNovoGasto = () => {
+    if (carregado) setNovoGasto(true);
+  };
+
+  // Atalhos do teclado (veja atalhos.tsx). Ctrl+S salva mesmo dentro de um campo.
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (alterado) salvar();
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey || e.altKey || digitando(e.target) || document.querySelector(".modal-fundo")) return;
+
+      const tecla = e.key.toLowerCase();
+
+      if (tecla === "n") {
+        e.preventDefault();
+        abrirNovoGasto();
+      } else if (e.key === "?") {
+        setAtalhos(true);
+      } else if (tecla === "o") {
+        alternarOcultar();
+      } else if (tecla === "t") {
+        alternarTema();
+      } else if (/^[1-5]$/.test(e.key)) {
+        irParaAba(ABAS[Number(e.key) - 1].id);
+      } else if (aba === "mes" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        const novo = somarMes(mesSelecionado, e.key === "ArrowLeft" ? -1 : 1);
+        if (anoDe(novo) >= faixaAnos.min && anoDe(novo) <= faixaAnos.max) mudarMes(novo);
+      }
+    };
+
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  });
 
   const enviarResumo = async () => {
     try {
@@ -608,6 +677,28 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       if (!falha) await Promise.all([carregarParcelas(mesSelecionado), carregarHistorico()]);
       return falha;
     };
+
+  /** Lançamento rápido (botão "+"): à vista entra como alteração do mês; parcelada grava na hora. */
+  const lancarRapido = async (d: NovoGastoDados) => {
+    const cartao = d.destino === "cartao" ? CARTAO : null;
+
+    if (d.parcelas) {
+      const falha = await adicionarParcelado(cartao)(
+        d.nome,
+        d.valor,
+        d.parcelas.atual,
+        d.parcelas.total,
+        d.categoria,
+        d.pessoa
+      );
+      if (!falha) mostrarAviso("ok", `"${d.nome}" cadastrada em ${d.parcelas.total}x.`, 3000);
+      return falha;
+    }
+
+    adicionarGasto(cartao)(d.nome, d.valor, d.categoria, d.dia, d.pessoa);
+    mostrarAviso("ok", `"${d.nome}" adicionado. Não esqueça de salvar.`, 3500);
+    return null;
+  };
 
   /**
    * Lança as compras de uma fatura importada. As à vista entram no mês como alterações
@@ -688,13 +779,13 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
     const { parcelamentoId, total } = gasto.parcela;
 
-    if (
-      !window.confirm(
-        `"${gasto.nome}" está parcelada em ${total}x. Remover apaga as ${total} parcelas, em todos os meses. Continuar?`
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmar({
+      titulo: "Remover compra parcelada?",
+      texto: `"${gasto.nome}" está parcelada em ${total}x. Remover apaga as ${total} parcelas, em todos os meses.`,
+      botao: `Remover as ${total} parcelas`,
+      perigo: true,
+    });
+    if (!ok) return;
 
     await chamar(`/api/parcelamentos?id=${parcelamentoId}`, "DELETE");
     await Promise.all([carregarParcelas(mesSelecionado), carregarHistorico()]);
@@ -714,13 +805,13 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   };
 
   const removerConta = async (conta: ContaFixaItem) => {
-    if (
-      !window.confirm(
-        `Remover "${conta.nome}" de ${labelMes(mesSelecionado)} em diante? Os meses anteriores continuam com ela.`
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmar({
+      titulo: `Remover "${conta.nome}"?`,
+      texto: `A conta sai de ${labelMes(mesSelecionado)} em diante. Os meses anteriores continuam com ela.`,
+      botao: "Remover",
+      perigo: true,
+    });
+    if (!ok) return;
 
     await chamar(`/api/contas-fixas?id=${conta.id}&mes=${mesSelecionado}`, "DELETE");
     await Promise.all([carregarContas(mesSelecionado), carregarHistorico()]);
@@ -754,13 +845,13 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   };
 
   const removerRendaFixa = async (renda: RendaFixaItem) => {
-    if (
-      !window.confirm(
-        `Remover "${renda.nome}" de ${labelMes(mesSelecionado)} em diante? Os meses anteriores continuam com ela.`
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmar({
+      titulo: `Remover "${renda.nome}"?`,
+      texto: `A renda sai de ${labelMes(mesSelecionado)} em diante. Os meses anteriores continuam com ela.`,
+      botao: "Remover",
+      perigo: true,
+    });
+    if (!ok) return;
 
     await chamar(`/api/rendas-fixas?id=${renda.id}&mes=${mesSelecionado}`, "DELETE");
     await atualizarRendas();
@@ -804,12 +895,13 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
     if (falha) {
       mostrarAviso("error", falha);
-      return;
+      return false;
     }
 
     setInvestGuardado(valor);
     await recarregarGuardado();
     mostrarAviso("ok", valor > 0 ? "Somado ao total guardado." : "Valor tirado do total guardado.", 3000);
+    return true;
   };
 
   // Metas
@@ -837,7 +929,16 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   };
 
   const removerMeta = async (meta: MetaDinheiro) => {
-    if (!window.confirm(`Remover a meta "${meta.nome}"?`)) return;
+    const ok = await confirmar({
+      titulo: `Remover a meta "${meta.nome}"?`,
+      texto:
+        meta.guardado > 0
+          ? `Ela tem ${fmt(meta.guardado)} guardados, que deixam de contar no total guardado.`
+          : "Essa ação não pode ser desfeita.",
+      botao: "Remover meta",
+      perigo: true,
+    });
+    if (!ok) return;
 
     await chamar(`/api/metas?id=${meta.id}`, "DELETE");
     await recarregarMetas();
@@ -874,557 +975,572 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
   // ──────────────────────────────────────────────────────────────────────────
 
-  const tituloMeta = principal?.nome ?? "";
+  const nome = nomeUsuario ?? "você";
+  const abaAtual = ABAS.find((a) => a.id === aba)!;
+  const statusSalvo = salvando ? "saving" : alterado ? "nao-salvo" : "";
+
+  const cartaoGuardado = (
+    <CartaoGuardado
+      total={totalGuardado(metas, guardadoGeral)}
+      semMeta={guardadoGeral}
+      naMetas={totalGuardado(metas, 0)}
+      quantidadeMetas={metas.length}
+      serie={serieTotalGuardado}
+      onAporte={aportarGuardado}
+    />
+  );
 
   return (
-    <div className={ocultar ? "oculto" : ""}>
-      <header className="app-header">
-        <div className="brand small">
-          <div className="brand-logo">
-            <LogoIcon size={18} />
+    <div className={`app-shell ${ocultar ? "oculto" : ""} ${alterado ? "com-barra" : ""}`}>
+      <BarraLateral aba={aba} onAba={irParaAba}>
+        <div className="sidebar-dica">
+          <strong>Dica</strong>
+          <p>
+            Aperte <kbd>N</kbd> para lançar um gasto e <kbd>?</kbd> para ver todos os atalhos.
+          </p>
+        </div>
+      </BarraLateral>
+
+      <div className="app-conteudo">
+        <header className="topbar">
+          <div className="topbar-marca">
+            <Marca pequena />
           </div>
-          <span className="brand-name">{NOME_APP}</span>
-        </div>
 
-        <div className="header-right">
-          <span className={`save-status ${salvando ? "saving" : alterado ? "nao-salvo" : ""}`}>
-            <span className="save-dot" />
-            <span className="save-text">
-              {salvando ? "Salvando..." : alterado ? "Alterações não salvas" : "Tudo salvo"}
+          <div className="topbar-titulo">
+            <h1>{aba === "mes" ? `${saudacao()}, ${nome}` : abaAtual.rotulo}</h1>
+            <p>{aba === "mes" ? `Resumo de ${labelMes(mesSelecionado)}` : SUBTITULO_ABA[aba]}</p>
+          </div>
+
+          <div className="topbar-acoes">
+            <span className={`save-status ${statusSalvo}`} role="status">
+              <span className="save-dot" />
+              <span className="save-text">
+                {salvando ? "Salvando..." : alterado ? "Não salvo" : "Tudo salvo"}
+              </span>
             </span>
-          </span>
 
-          {nomeUsuario && <span className="header-user">Olá, {nomeUsuario}</span>}
+            <BotaoTopo titulo={ocultar ? "Mostrar valores (O)" : "Ocultar valores (O)"} onClick={alternarOcultar} ativo={ocultar}>
+              <IconeOlho size={18} fechado={ocultar} />
+            </BotaoTopo>
 
-          <BotaoIcone titulo={ocultar ? "Mostrar valores" : "Ocultar valores"} onClick={alternarOcultar} ativo={ocultar}>
-            <Icon size={18}>
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              <circle cx="12" cy="12" r="3" />
-              {ocultar && <path d="M3 3l18 18" />}
-            </Icon>
-          </BotaoIcone>
+            <BotaoTopo titulo={escuro ? "Modo claro (T)" : "Modo escuro (T)"} onClick={alternarTema} classe="so-computador">
+              {escuro ? <IconeSol size={18} /> : <IconeLua size={18} />}
+            </BotaoTopo>
 
-          <BotaoIcone titulo={escuro ? "Modo claro" : "Modo escuro"} onClick={() => setEscuro(!escuro)}>
-            <Icon size={18}>
-              {escuro ? (
-                <>
-                  <circle cx="12" cy="12" r="4" />
-                  <path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
-                </>
-              ) : (
-                <path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z" />
+            <button className="btn btn-primary btn-sm so-computador" onClick={abrirNovoGasto} disabled={!carregado}>
+              <IconeMais size={17} />
+              Novo gasto
+            </button>
+
+            <MenuUsuario
+              nome={nome}
+              escuro={escuro}
+              ocultar={ocultar}
+              onTema={alternarTema}
+              onOcultar={alternarOcultar}
+              onResumo={enviarResumo}
+              onAtalhos={() => setAtalhos(true)}
+              onSair={pedirSaida}
+            />
+          </div>
+        </header>
+
+        <main className="app-main" key={aba}>
+          {aba === "metas" && (
+            <>
+              {cartaoGuardado}
+              <PainelMetas
+                metas={metas}
+                investimento={investimento}
+                gastosMensais={totalGastos}
+                onCriar={criarMeta}
+                onAporte={aportarMeta}
+                onEditar={editarMeta}
+                onRemover={removerMeta}
+              />
+              <PainelEvolucaoGuardado saldos={saldos} mesAtual={MES_ATUAL} escuro={escuro} />
+            </>
+          )}
+
+          {aba === "ano" && <PainelAno historico={historico} anoAtual={ANO_ATUAL} />}
+
+          {aba === "dicas" && (
+            <PainelDicas mesLabel={labelMes(mesSelecionado)} dicas={dicas} totalGastos={totalGastos} passos={passos} />
+          )}
+
+          {aba === "prefs" &&
+            (prefsCarregadas ? (
+              <PainelPreferencias prefs={prefs} onSalvar={salvarPrefs} />
+            ) : (
+              <div className="card esqueleto esqueleto--bloco" aria-label="Carregando preferências" />
+            ))}
+
+          {aba === "mes" && (
+            <>
+              <div className="mes-barra">
+                <SeletorMes
+                  mes={mesSelecionado}
+                  mesAtual={MES_ATUAL}
+                  mesesComDados={mesesComDados}
+                  anoMin={faixaAnos.min}
+                  anoMax={faixaAnos.max}
+                  onChange={mudarMes}
+                />
+                <p className="mes-barra-dica">
+                  O resumo se atualiza enquanto você digita. Quando terminar, clique em <strong>Salvar</strong>.
+                </p>
+              </div>
+
+              <div className="hero-grid">
+                {cartaoGuardado}
+                <CartaoLimite
+                  percentual={percentGastos}
+                  status={statusLimite}
+                  renda={renda}
+                  totalGastos={totalGastos}
+                  limite={limiteGastos}
+                  folga={folgaLimite}
+                />
+              </div>
+
+              <AvisoLimite
+                status={statusLimite}
+                renda={renda}
+                totalGastos={totalGastos}
+                limite={limiteGastos}
+                folga={folgaLimite}
+              />
+
+              {previsao && <PrevisaoMes previsao={previsao} limite={limiteGastos} />}
+
+              <AvisoVencimentos itens={vencimentos} />
+
+              {sugestao && (
+                <section className="card copy-banner">
+                  <p>
+                    <strong>Este mês está vazio.</strong> Quer começar com os valores de{" "}
+                    {labelMes(somarMes(mesSelecionado, -1))}?
+                  </p>
+
+                  <div className="copy-actions">
+                    <button className="btn btn-primary btn-sm" onClick={() => copiarDoMesAnterior(false)}>
+                      Copiar valores
+                    </button>
+                    <button className="btn btn-outline btn-sm" onClick={() => copiarDoMesAnterior(true)}>
+                      Copiar valores e compras
+                    </button>
+                  </div>
+                </section>
               )}
-            </Icon>
-          </BotaoIcone>
 
-          <BotaoIcone titulo="Enviar o resumo deste mês por e-mail" onClick={enviarResumo}>
-            <Icon size={18}>
-              <rect x="2" y="4" width="20" height="16" rx="2" />
-              <path d="M22 6l-10 7L2 6" />
-            </Icon>
-          </BotaoIcone>
+              <div className="cards-grid">
+                <Kpi
+                  rotulo="Quanto sobra"
+                  valor={saldo}
+                  cor={saldo >= 0 ? "green" : "red"}
+                  icone={<IconeCarteira size={19} />}
+                  sub={saldo >= 0 ? "Renda menos todos os gastos" : "Você gastou mais do que ganhou"}
+                />
 
-          <BotaoIcone titulo="Baixar todos os meses em CSV (Excel)" href="/api/export">
-            <Icon size={18}>
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-            </Icon>
-          </BotaoIcone>
+                <Kpi
+                  rotulo="Para investir"
+                  valor={investimento}
+                  cor="blue"
+                  icone={<IconeTendencia size={19} />}
+                  sub={`${percentualInvestimento}% do que sobra`}
+                  acao={
+                    investimento > 0 || investGuardado > 0 ? (
+                      <AcaoGuardar
+                        investimento={investimento}
+                        jaGuardado={investGuardado}
+                        podeGuardar={carregado && !alterado && mesesComDados.has(mesSelecionado)}
+                        onGuardar={guardarInvestimento}
+                      />
+                    ) : undefined
+                  }
+                />
 
-          <button className="btn btn-outline" onClick={pedirSaida}>
-            Sair
-          </button>
-        </div>
-      </header>
+                <Kpi
+                  rotulo="Livre para gastar"
+                  valor={livre}
+                  cor="amber"
+                  icone={<IconeRelogio size={19} />}
+                  sub={
+                    livrePorDia > 0
+                      ? `Cerca de ${fmt(livrePorDia)} por dia até o fim do mês`
+                      : "Depois de separar o investimento"
+                  }
+                />
+
+                {contas.length > 0 && (
+                  <Kpi
+                    rotulo="Contas a pagar"
+                    valor={totalAPagar}
+                    cor={vencimentos.length > 0 ? "red" : "teal"}
+                    icone={<IconeCalendario size={19} />}
+                    progresso={((contas.length - contasPendentes.length) / contas.length) * 100}
+                    sub={
+                      contasPendentes.length === 0
+                        ? "Tudo pago neste mês"
+                        : `${contas.length - contasPendentes.length} de ${contas.length} contas fixas pagas`
+                    }
+                  />
+                )}
+
+                {totalNubank > 0 && (
+                  <Kpi
+                    rotulo={`Cartão ${CARTAO}`}
+                    valor={totalNubank}
+                    cor="purple"
+                    icone={
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src="/nubank-card.png" alt="" width={30} height={19} className="kpi-img" />
+                    }
+                    progresso={configCartao?.limite ? (totalNubank / configCartao.limite) * 100 : undefined}
+                    sub={
+                      configCartao?.limite
+                        ? `${((totalNubank / configCartao.limite) * 100).toFixed(0)}% do limite de ${fmt(configCartao.limite)}`
+                        : `${gastosNubank.length} ${gastosNubank.length === 1 ? "compra" : "compras"} neste mês`
+                    }
+                  />
+                )}
+
+                {principal && (
+                  <Kpi
+                    rotulo={`Meta: ${principal.nome}`}
+                    valor={principal.alvo}
+                    cor="teal"
+                    icone={<IconeAlvo size={19} />}
+                    progresso={progressoMeta(principal)}
+                    sub={`${fmt(principal.guardado)} guardados (${progressoMeta(principal).toFixed(0)}%)${
+                      mesesParaMeta > 0 ? ` · cerca de ${mesesParaMeta} ${mesesParaMeta === 1 ? "mês" : "meses"}` : ""
+                    }`}
+                  />
+                )}
+              </div>
+
+              <div className="mes-layout">
+                <section className="card coluna-numeros">
+                  <div className="panel-head">
+                    <h2 className="panel-title">Seus números do mês</h2>
+                    <p className="panel-sub">Digite os valores em reais.</p>
+                  </div>
+
+                  <div className="panel-body">
+                    <div className="input-section input-section--entrada">
+                      <span className="input-section-label">Entrada</span>
+
+                      <RendasFixas
+                        rendas={rendasFixas}
+                        onAdicionar={adicionarRendaFixa}
+                        onEditar={editarRendaFixa}
+                        onRemover={removerRendaFixa}
+                      />
+
+                      <FontesRenda fontes={rendas} total={renda} onChange={setRendas} onTornarFixa={tornarRendaFixa} />
+                    </div>
+
+                    <div className="input-section input-section--saidas">
+                      <span className="input-section-label">Saídas</span>
+
+                      <InputField
+                        label="Outros gastos fixos"
+                        hint="Fixos que não estão nas contas fixas (veja a aba Contas fixas ao lado)."
+                        type="number"
+                        prefix="R$"
+                        placeholder="0,00"
+                        value={gastosFixos}
+                        onChange={(v) => setGastosFixos(numero(v))}
+                      />
+
+                      <InputField
+                        label="Gastos variáveis"
+                        hint="Mercado, lazer, transporte, compras."
+                        type="number"
+                        prefix="R$"
+                        placeholder="0,00"
+                        value={gastosVariaveis}
+                        onChange={(v) => setGastosVariaveis(numero(v))}
+                      />
+
+                      {totalContas > 0 && (
+                        <p className="field-hint">
+                          + {fmt(totalContas)} de contas fixas = {fmt(gastosFixos + totalContas)} em gastos fixos.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="input-section input-section--objetivos">
+                      <span className="input-section-label">Objetivos</span>
+
+                      <div className="field">
+                        <div className="slider-cabeca">
+                          <label htmlFor="percentual-investir">Quanto do que sobra investir</label>
+                          <span className="slider-valor">{percentualInvestimento}%</span>
+                        </div>
+
+                        <input
+                          id="percentual-investir"
+                          type="range"
+                          className="slider"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={percentualInvestimento}
+                          style={{ "--p": `${percentualInvestimento}%` } as React.CSSProperties}
+                          onChange={(e) => setPercentualInvestimento(Math.min(100, numero(e.target.value)))}
+                        />
+
+                        <div className="chips chips--pequenos" role="group" aria-label="Porcentagens rápidas">
+                          {PERCENTUAIS_RAPIDOS.map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              className="chip-escolha"
+                              aria-pressed={percentualInvestimento === p}
+                              onClick={() => setPercentualInvestimento(p)}
+                            >
+                              {p}%
+                            </button>
+                          ))}
+                        </div>
+
+                        <span className="field-hint">
+                          {investimento > 0
+                            ? `= ${fmt(investimento)} por mês para investir. As metas ficam na aba Metas.`
+                            : "Separa essa parte da sobra do mês. As metas ficam na aba Metas."}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="coluna-lancamentos">
+                  <Lancamentos
+                    abas={[
+                      { id: "contas", rotulo: "Contas fixas", quantidade: contas.length, total: totalContas },
+                      { id: "cartao", rotulo: `Cartão ${CARTAO}`, quantidade: gastosNubank.length, total: totalNubank },
+                      { id: "outros", rotulo: "Outros gastos", quantidade: gastosAvulsos.length, total: somar(gastosAvulsos) },
+                    ]}
+                    filtro={filtro}
+                    onFiltro={setFiltro}
+                    conteudo={{
+                      contas: (
+                        <PainelContasFixas
+                          embutido
+                          mes={mesSelecionado}
+                          contas={contas}
+                          pagos={pagos}
+                          ehMesAtual={ehMesAtual}
+                          onAdicionar={adicionarConta}
+                          onEditar={editarConta}
+                          onRemover={removerConta}
+                          onPagar={pagar}
+                        />
+                      ),
+                      cartao: (
+                        <ListaGastos
+                          embutido
+                          titulo={`Cartão ${CARTAO}`}
+                          descricao="Compras à vista e parceladas deste mês."
+                          placeholder="Compra no cartão"
+                          vazio="Nenhuma compra no cartão neste mês."
+                          parcelavel
+                          pessoas={prefs.pessoas}
+                          mes={mesSelecionado}
+                          filtro={filtro}
+                          gastos={gastosNubank}
+                          extra={
+                            <>
+                              <CartaoInfo
+                                mes={mesSelecionado}
+                                config={configCartao}
+                                usado={totalNubank}
+                                ehMesAtual={ehMesAtual}
+                                paga={faturaPaga}
+                                onPagar={(pago) => pagar(`fatura:${CARTAO}`, pago)}
+                              />
+
+                              <ImportarFatura
+                                mes={mesSelecionado}
+                                existentes={gastosNubank}
+                                pessoas={prefs.pessoas}
+                                onImportar={importarFatura}
+                              />
+                            </>
+                          }
+                          onAdicionar={adicionarGasto(CARTAO)}
+                          onAdicionarParcelado={adicionarParcelado(CARTAO)}
+                          onEditar={editarItem}
+                          onRemover={removerItem}
+                        />
+                      ),
+                      outros: (
+                        <ListaGastos
+                          embutido
+                          titulo="Outros gastos"
+                          descricao="Compras avulsas do mês, no dinheiro, Pix ou débito."
+                          placeholder="O que você comprou?"
+                          vazio="Nenhum gasto anotado neste mês."
+                          pessoas={prefs.pessoas}
+                          mes={mesSelecionado}
+                          filtro={filtro}
+                          gastos={gastosAvulsos}
+                          onAdicionar={adicionarGasto(null)}
+                          onEditar={editarItem}
+                          onRemover={removerItem}
+                        />
+                      ),
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="charts-grid">
+                <PainelCategorias linhas={linhasCategoria} orcamentos={prefs.orcamentos} />
+
+                {prefs.pessoas.length > 0 && <PainelPessoas linhas={linhasPessoa} />}
+
+                {dadosComparativo !== undefined && (
+                  <PainelComparacao
+                    atual={{ total: totalGastos, linhas: linhasCategoria }}
+                    anterior={dadosComparativo}
+                    labelAnterior={labelMes(somarMes(mesSelecionado, -1))}
+                  />
+                )}
+
+                <PainelProjecao
+                  investimento={investimento}
+                  falta={faltaMeta}
+                  nomeMeta={principal?.nome ?? null}
+                  mesesParaMeta={mesesParaMeta}
+                  escuro={escuro}
+                />
+                <PainelEvolucao historico={historico} escuro={escuro} />
+              </div>
+
+              <section className="card history-panel">
+                <div className="panel-head">
+                  <h2 className="panel-title">Meses anteriores</h2>
+                  <p className="panel-sub">Clique para abrir um mês.</p>
+                </div>
+
+                {historico.length === 0 ? (
+                  <div className="history-empty">Nenhum mês salvo ainda.</div>
+                ) : (
+                  <div className="history-list">
+                    {historico.map((item) => {
+                      const usado = item.renda > 0 ? Math.min(100, (item.totalGastos / item.renda) * 100) : 0;
+                      const passou = passouDoLimite(item.renda, item.totalGastos);
+
+                      return (
+                        <button
+                          key={item.id}
+                          className={`history-item ${item.mesReferencia === mesSelecionado ? "active" : ""}`}
+                          onClick={() => mudarMes(item.mesReferencia)}
+                        >
+                          <span className="history-topo">
+                            <span className="history-month">{labelCurto(item.mesReferencia)}</span>
+                            {passou && <span className="history-flag">acima de {LIMITE_GASTOS_PERCENT}%</span>}
+                          </span>
+
+                          <span className={`history-saldo ${item.saldo >= 0 ? "positive" : "negative"}`}>
+                            {fmt(item.saldo)}
+                          </span>
+
+                          <span className="history-barra" aria-hidden="true">
+                            <span
+                              className={passou ? "history-barra--alerta" : ""}
+                              style={{ width: `${usado}%` }}
+                            />
+                          </span>
+
+                          <span className="history-sub">Gastou {fmt(item.totalGastos)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+        </main>
+      </div>
+
+      <BarraInferior aba={aba} onAba={irParaAba} />
+
+      <button
+        className="fab"
+        onClick={abrirNovoGasto}
+        disabled={!carregado}
+        aria-label="Lançar um gasto novo"
+        title="Novo gasto (N)"
+      >
+        <IconeMais size={26} />
+      </button>
 
       {aviso && (
-        <div className={`toast toast--${aviso.tipo}`} role="status">
-          {aviso.texto}
+        <div key={aviso.id} className={`toast toast--${aviso.tipo}`} role="status">
+          <span className="toast-icone">
+            {aviso.tipo === "ok" ? <IconeCheck size={16} /> : <IconeAlerta size={16} />}
+          </span>
+          <span className="toast-texto">{aviso.texto}</span>
+          <button className="toast-x" onClick={() => setAviso(null)} aria-label="Fechar aviso">
+            <IconeX size={14} />
+          </button>
         </div>
       )}
 
       {alterado && (
         <div className="barra-salvar" role="status">
-          <span>
-            Você tem alterações <strong>não salvas</strong>.
+          <span className="barra-salvar-texto">
+            <span className="save-dot" />
+            Alterações <strong>não salvas</strong>
           </span>
-          <button className="btn btn-primary btn-sm" onClick={salvar} disabled={salvando}>
-            {salvando ? "Salvando..." : "Salvar"}
-          </button>
-        </div>
-      )}
-
-      {pendente && (
-        <div className="modal-fundo" role="presentation" onClick={() => setPendente(null)}>
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-titulo"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="modal-titulo">Salvar antes de {pendente.rotulo}?</h2>
-            <p>
-              Você alterou os dados de <strong>{labelMes(mesSelecionado)}</strong> e ainda não salvou. Se continuar
-              sem salvar, essas alterações serão perdidas.
-            </p>
-
-            <div className="modal-acoes">
-              <button className="btn btn-primary" onClick={salvarEContinuar} disabled={salvando}>
-                {salvando ? "Salvando..." : "Salvar e continuar"}
-              </button>
-              <button className="btn btn-outline" onClick={continuarSemSalvar} disabled={salvando}>
-                Continuar sem salvar
-              </button>
-              <button className="link-btn center" onClick={() => setPendente(null)}>
-                Voltar
-              </button>
-            </div>
+          <div className="barra-salvar-acoes">
+            <button className="btn btn-ghost btn-sm" onClick={descartar} disabled={salvando}>
+              Descartar
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={salvar} disabled={salvando}>
+              {salvando ? <span className="btn-spinner" /> : "Salvar"}
+            </button>
           </div>
         </div>
       )}
 
-      <main className={`app-main ${alterado ? "com-barra" : ""}`}>
-        <nav className="abas" role="tablist" aria-label="Seções">
-          {ABAS.map((a) => (
-            <button
-              key={a.id}
-              role="tab"
-              aria-selected={aba === a.id}
-              className="aba"
-              onClick={() => setAba(a.id)}
-            >
-              {a.rotulo}
+      {pendente && (
+        <Modal titulo={`Salvar antes de ${pendente.rotulo}?`} onFechar={() => setPendente(null)}>
+          <p className="modal-texto">
+            Você alterou os dados de <strong>{labelMes(mesSelecionado)}</strong> e ainda não salvou. Se continuar sem
+            salvar, essas alterações serão perdidas.
+          </p>
+
+          <div className="modal-acoes">
+            <button className="btn btn-primary" onClick={salvarEContinuar} disabled={salvando} data-autofocus>
+              {salvando ? "Salvando..." : "Salvar e continuar"}
             </button>
-          ))}
-        </nav>
+            <button className="btn btn-outline" onClick={continuarSemSalvar} disabled={salvando}>
+              Continuar sem salvar
+            </button>
+          </div>
+        </Modal>
+      )}
 
-        {(aba === "mes" || aba === "metas") && (
-          <CartaoGuardado
-            total={totalGuardado(metas, guardadoGeral)}
-            semMeta={guardadoGeral}
-            naMetas={totalGuardado(metas, 0)}
-            quantidadeMetas={metas.length}
-            onAporte={aportarGuardado}
-          />
-        )}
+      {novoGasto && (
+        <NovoGasto
+          mes={mesSelecionado}
+          ehMesAtual={ehMesAtual}
+          cartao={CARTAO}
+          pessoas={prefs.pessoas}
+          onFechar={() => setNovoGasto(false)}
+          onAdicionar={lancarRapido}
+        />
+      )}
 
-        {aba === "metas" && (
-          <PainelMetas
-            metas={metas}
-            investimento={investimento}
-            gastosMensais={totalGastos}
-            onCriar={criarMeta}
-            onAporte={aportarMeta}
-            onEditar={editarMeta}
-            onRemover={removerMeta}
-          />
-        )}
+      {atalhos && <JanelaAtalhos onFechar={() => setAtalhos(false)} />}
 
-        {aba === "metas" && <PainelEvolucaoGuardado saldos={saldos} mesAtual={MES_ATUAL} escuro={escuro} />}
-
-        {aba === "ano" && <PainelAno historico={historico} anoAtual={ANO_ATUAL} />}
-
-        {aba === "dicas" && (
-          <PainelDicas mesLabel={labelMes(mesSelecionado)} dicas={dicas} totalGastos={totalGastos} passos={passos} />
-        )}
-
-        {aba === "prefs" &&
-          (prefsCarregadas ? (
-            <PainelPreferencias prefs={prefs} onSalvar={salvarPrefs} />
-          ) : (
-            <div className="card empty-state">Carregando preferências...</div>
-          ))}
-
-        {aba === "mes" && (
-          <>
-            <div className="page-intro">
-              <h1>Seu mês em um só lugar</h1>
-              <p>
-                Preencha os valores abaixo. O resumo se atualiza sozinho. Quando terminar, clique em{" "}
-                <strong>Salvar</strong> (ou aperte Ctrl+S).
-              </p>
-            </div>
-
-            <section className="card month-bar">
-              <SeletorMes
-                mes={mesSelecionado}
-                mesAtual={MES_ATUAL}
-                mesesComDados={mesesComDados}
-                anoMin={faixaAnos.min}
-                anoMax={faixaAnos.max}
-                onChange={mudarMes}
-              />
-
-              <div className="spend">
-                <div className="spend-head">
-                  <span>Gastos em relação à renda (limite de {LIMITE_GASTOS_PERCENT}%)</span>
-                  <strong>{percentGastos.toFixed(0)}%</strong>
-                </div>
-
-                <div className="spend-track">
-                  <div className={`spend-fill ${CLASSE_BARRA[statusLimite]}`} style={{ width: `${percentGastos}%` }} />
-                  <span
-                    className="spend-limit"
-                    style={{ left: `${LIMITE_GASTOS_PERCENT}%` }}
-                    title={`Limite de ${LIMITE_GASTOS_PERCENT}% da renda`}
-                  />
-                </div>
-
-                {statusLimite !== "sem-renda" && (
-                  <span className={`spend-note spend-note--${statusLimite}`}>
-                    {folgaLimite > 0
-                      ? `Ainda pode gastar ${fmt(folgaLimite)} dentro do limite (${fmt(limiteGastos)})`
-                      : folgaLimite === 0
-                      ? `Você chegou ao limite de ${fmt(limiteGastos)}`
-                      : `${fmt(-folgaLimite)} acima do limite de ${fmt(limiteGastos)}`}
-                  </span>
-                )}
-              </div>
-            </section>
-
-            <AvisoLimite
-              status={statusLimite}
-              renda={renda}
-              totalGastos={totalGastos}
-              limite={limiteGastos}
-              folga={folgaLimite}
-            />
-
-            {previsao && <PrevisaoMes previsao={previsao} limite={limiteGastos} />}
-
-            <AvisoVencimentos itens={vencimentos} />
-
-            {sugestao && (
-              <section className="card copy-banner">
-                <p>
-                  <strong>Este mês está vazio.</strong> Quer começar com os valores de{" "}
-                  {labelMes(somarMes(mesSelecionado, -1))}?
-                </p>
-
-                <div className="copy-actions">
-                  <button className="btn btn-primary btn-sm" onClick={() => copiarDoMesAnterior(false)}>
-                    Copiar valores
-                  </button>
-                  <button className="btn btn-outline btn-sm" onClick={() => copiarDoMesAnterior(true)}>
-                    Copiar valores e compras
-                  </button>
-                </div>
-              </section>
-            )}
-
-            <div className="cards-grid">
-              <SummaryCard
-                label="Quanto sobra"
-                value={fmt(saldo)}
-                accent={saldo >= 0 ? "green" : "red"}
-                icon={
-                  <Icon>
-                    <rect x="2" y="5" width="20" height="14" rx="2" />
-                    <path d="M2 10h20" />
-                  </Icon>
-                }
-                sub={saldo >= 0 ? "Renda menos todos os gastos" : "Você gastou mais do que ganhou"}
-              />
-
-              <SummaryCard
-                label="Para investir"
-                value={fmt(investimento)}
-                accent="blue"
-                icon={
-                  <Icon>
-                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-                    <polyline points="17 6 23 6 23 12" />
-                  </Icon>
-                }
-                sub={`${percentualInvestimento}% do que sobra`}
-                acao={
-                  investimento > 0 || investGuardado > 0 ? (
-                    <AcaoGuardar
-                      investimento={investimento}
-                      jaGuardado={investGuardado}
-                      podeGuardar={carregado && !alterado && mesesComDados.has(mesSelecionado)}
-                      onGuardar={guardarInvestimento}
-                    />
-                  ) : undefined
-                }
-              />
-
-              <SummaryCard
-                label="Livre para gastar"
-                value={fmt(livre)}
-                accent="amber"
-                icon={
-                  <Icon>
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 6v6l4 2" />
-                  </Icon>
-                }
-                sub="Depois de separar o investimento"
-              />
-
-              {contas.length > 0 && (
-                <SummaryCard
-                  label="Contas a pagar"
-                  value={fmt(totalAPagar)}
-                  accent={vencimentos.length > 0 ? "red" : "teal"}
-                  icon={
-                    <Icon>
-                      <rect x="3" y="4" width="18" height="18" rx="2" />
-                      <path d="M16 2v4M8 2v4M3 10h18" />
-                    </Icon>
-                  }
-                  sub={
-                    contasPendentes.length === 0
-                      ? "Tudo pago neste mês"
-                      : `${contasPendentes.length} de ${contas.length} contas fixas ainda sem pagar`
-                  }
-                />
-              )}
-
-              {totalNubank > 0 && (
-                <SummaryCard
-                  label="Cartão Nubank"
-                  value={fmt(totalNubank)}
-                  accent="purple"
-                  icon={
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src="/nubank-card.png" alt="" width={34} height={22} className="summary-img" />
-                  }
-                  sub={
-                    configCartao?.limite
-                      ? `${((totalNubank / configCartao.limite) * 100).toFixed(0)}% do limite de ${fmt(configCartao.limite)}`
-                      : `${gastosNubank.length} ${gastosNubank.length === 1 ? "compra" : "compras"} neste mês`
-                  }
-                />
-              )}
-
-              {principal && (
-                <SummaryCard
-                  label={`Meta: ${tituloMeta}`}
-                  value={fmt(principal.alvo)}
-                  accent="teal"
-                  icon={
-                    <Icon>
-                      <circle cx="12" cy="12" r="10" />
-                      <circle cx="12" cy="12" r="6" />
-                      <circle cx="12" cy="12" r="2" />
-                    </Icon>
-                  }
-                  sub={`${fmt(principal.guardado)} guardados (${progressoMeta(principal).toFixed(0)}%)${
-                    mesesParaMeta > 0 ? ` · cerca de ${mesesParaMeta} ${mesesParaMeta === 1 ? "mês" : "meses"}` : ""
-                  }`}
-                />
-              )}
-            </div>
-
-            <div className="mes-layout">
-              <section className="card coluna-numeros">
-                <div className="panel-head">
-                  <h2 className="panel-title">Seus números do mês</h2>
-                  <p className="panel-sub">Digite os valores em reais.</p>
-                </div>
-
-                <div className="panel-body">
-                  <div className="input-section">
-                    <span className="input-section-label">Entrada</span>
-
-                    <RendasFixas
-                      rendas={rendasFixas}
-                      onAdicionar={adicionarRendaFixa}
-                      onEditar={editarRendaFixa}
-                      onRemover={removerRendaFixa}
-                    />
-
-                    <FontesRenda fontes={rendas} total={renda} onChange={setRendas} onTornarFixa={tornarRendaFixa} />
-                  </div>
-
-                  <div className="input-section">
-                    <span className="input-section-label">Saídas</span>
-
-                    <InputField
-                      label="Outros gastos fixos"
-                      hint="Fixos que não estão nas contas fixas (veja a aba Contas fixas ao lado)."
-                      type="number"
-                      prefix="R$"
-                      placeholder="0,00"
-                      value={gastosFixos}
-                      onChange={(v) => setGastosFixos(numero(v))}
-                    />
-
-                    <InputField
-                      label="Gastos variáveis"
-                      hint="Mercado, lazer, transporte, compras."
-                      type="number"
-                      prefix="R$"
-                      placeholder="0,00"
-                      value={gastosVariaveis}
-                      onChange={(v) => setGastosVariaveis(numero(v))}
-                    />
-
-                    {totalContas > 0 && (
-                      <p className="field-hint">
-                        + {fmt(totalContas)} de contas fixas = {fmt(gastosFixos + totalContas)} em gastos fixos.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="input-section">
-                    <span className="input-section-label">Objetivos</span>
-
-                    <InputField
-                      label="Quanto do que sobra investir"
-                      hint="Em porcentagem. Ex.: 20 separa 20% da sobra. As metas ficam na aba Metas."
-                      type="number"
-                      suffix="%"
-                      max={100}
-                      placeholder="0"
-                      value={percentualInvestimento}
-                      onChange={(v) => setPercentualInvestimento(Math.min(100, numero(v)))}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              <div className="coluna-lancamentos">
-                <Lancamentos
-                  abas={[
-                    { id: "contas", rotulo: "Contas fixas", quantidade: contas.length, total: totalContas, cor: "#0f766e" },
-                    { id: "cartao", rotulo: "Cartão Nubank", quantidade: gastosNubank.length, total: totalNubank, cor: "#7c3aed" },
-                    { id: "outros", rotulo: "Outros gastos", quantidade: gastosAvulsos.length, total: somar(gastosAvulsos), cor: "#64748b" },
-                  ]}
-                  filtro={filtro}
-                  onFiltro={setFiltro}
-                  conteudo={{
-                    contas: (
-                      <PainelContasFixas
-                        embutido
-                        mes={mesSelecionado}
-                        contas={contas}
-                        pagos={pagos}
-                        ehMesAtual={ehMesAtual}
-                        onAdicionar={adicionarConta}
-                        onEditar={editarConta}
-                        onRemover={removerConta}
-                        onPagar={pagar}
-                      />
-                    ),
-                    cartao: (
-                      <ListaGastos
-                        embutido
-                        titulo="Cartão Nubank"
-                        descricao="Compras à vista e parceladas deste mês."
-                        placeholder="Compra no cartão"
-                        vazio="Nenhuma compra no cartão neste mês."
-                        parcelavel
-                        pessoas={prefs.pessoas}
-                        mes={mesSelecionado}
-                        filtro={filtro}
-                        gastos={gastosNubank}
-                        extra={
-                          <>
-                            <CartaoInfo
-                              mes={mesSelecionado}
-                              config={configCartao}
-                              usado={totalNubank}
-                              ehMesAtual={ehMesAtual}
-                              paga={faturaPaga}
-                              onPagar={(pago) => pagar(`fatura:${CARTAO}`, pago)}
-                            />
-
-                            <ImportarFatura
-                              mes={mesSelecionado}
-                              existentes={gastosNubank}
-                              pessoas={prefs.pessoas}
-                              onImportar={importarFatura}
-                            />
-                          </>
-                        }
-                        onAdicionar={adicionarGasto(CARTAO)}
-                        onAdicionarParcelado={adicionarParcelado(CARTAO)}
-                        onEditar={editarItem}
-                        onRemover={removerItem}
-                      />
-                    ),
-                    outros: (
-                      <ListaGastos
-                        embutido
-                        titulo="Outros gastos"
-                        descricao="Compras avulsas do mês, no dinheiro, Pix ou débito."
-                        placeholder="O que você comprou?"
-                        vazio="Nenhum gasto anotado neste mês."
-                        pessoas={prefs.pessoas}
-                        mes={mesSelecionado}
-                        filtro={filtro}
-                        gastos={gastosAvulsos}
-                        onAdicionar={adicionarGasto(null)}
-                        onEditar={editarItem}
-                        onRemover={removerItem}
-                      />
-                    ),
-                  }}
-                />
-              </div>
-            </div>
-
-            <section className="card history-panel">
-              <div className="panel-head">
-                <h2 className="panel-title">Meses anteriores</h2>
-                <p className="panel-sub">Clique para abrir um mês.</p>
-              </div>
-
-              {historico.length === 0 ? (
-                <div className="history-empty">Nenhum mês salvo ainda.</div>
-              ) : (
-                <div className="history-list history-list--grade">
-                  {historico.map((item) => (
-                    <button
-                      key={item.id}
-                      className={`history-item ${item.mesReferencia === mesSelecionado ? "active" : ""}`}
-                      onClick={() => mudarMes(item.mesReferencia)}
-                    >
-                      <span className="history-month">{labelMes(item.mesReferencia)}</span>
-
-                      <span className={`history-saldo ${item.saldo >= 0 ? "positive" : "negative"}`}>
-                        {fmt(item.saldo)}
-                      </span>
-
-                      <span className="history-sub">
-                        Gastou {fmt(item.totalGastos)}
-                        {passouDoLimite(item.renda, item.totalGastos) && (
-                          <span className="history-flag">acima de {LIMITE_GASTOS_PERCENT}%</span>
-                        )}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <div className="charts-grid">
-              <PainelCategorias linhas={linhasCategoria} orcamentos={prefs.orcamentos} />
-
-              {prefs.pessoas.length > 0 && <PainelPessoas linhas={linhasPessoa} />}
-
-              {dadosComparativo !== undefined && (
-                <PainelComparacao
-                  atual={{ total: totalGastos, linhas: linhasCategoria }}
-                  anterior={dadosComparativo}
-                  labelAnterior={labelMes(somarMes(mesSelecionado, -1))}
-                />
-              )}
-
-              <PainelProjecao
-                investimento={investimento}
-                falta={faltaMeta}
-                nomeMeta={principal?.nome ?? null}
-                mesesParaMeta={mesesParaMeta}
-                escuro={escuro}
-              />
-              <PainelEvolucao historico={historico} escuro={escuro} />
-            </div>
-          </>
-        )}
-      </main>
+      {dialogo}
     </div>
   );
 }

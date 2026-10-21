@@ -1,7 +1,12 @@
 import { NOME_APP } from "@/lib/app";
 import type { Metadata, Viewport } from "next";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./app.css";
 import Providers from "./providers";
+
+// Inter no texto (números bem alinhados) e Plus Jakarta Sans nos títulos e valores grandes
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta", display: "swap" });
 
 export const metadata: Metadata = {
   title: NOME_APP,
@@ -25,8 +30,8 @@ export const viewport: Viewport = {
   // usa a tela inteira (as áreas do entalhe e da barra inferior são tratadas no CSS)
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#151c2e" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f6fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0f1a" },
   ],
 };
 
@@ -36,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" className={`${inter.variable} ${jakarta.variable}`} suppressHydrationWarning>
       <head>
         {/* Aplica o tema salvo (ou o do sistema) antes da página aparecer, sem piscar */}
         <script

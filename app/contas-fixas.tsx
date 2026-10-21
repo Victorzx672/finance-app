@@ -5,7 +5,8 @@ import { somar } from "@/lib/calculos";
 import { diasAteVencimento, situacaoConta, textoVencimento } from "@/lib/vencimentos";
 import type { ContaFixaItem } from "./dados";
 import { SelectCategoria } from "./lista-gastos";
-import { ChipCategoria, Icon, fmt, numero } from "./ui";
+import { IconeLapis, IconeX } from "./icones";
+import { ChipCategoria, Vazio, fmt, numero } from "./ui";
 
 export interface EdicaoConta {
   nome: string;
@@ -58,6 +59,7 @@ export function PainelContasFixas({
 
   const total = somar(contas);
   const totalPendente = somar(contas.filter((c) => !pagos.includes(`conta:${c.id}`)));
+  const quantasPagas = contas.filter((c) => pagos.includes(`conta:${c.id}`)).length;
 
   const adicionar = async () => {
     const d = lerDia(dia);
@@ -174,133 +176,135 @@ export function PainelContasFixas({
       </div>
 
       {contas.length === 0 ? (
-        <div className="empty-state">Nenhuma conta fixa neste mês. Cadastre uma e ela passa a valer todo mês.</div>
+        <Vazio texto="Nenhuma conta fixa neste mês. Cadastre uma e ela passa a valer todo mês." />
       ) : (
-        <ul className="linhas linhas--contas">
-          <li className="linhas-cabecalho" aria-hidden="true">
-            <span>Pago</span>
-            <span>Conta</span>
-            <span>Categoria</span>
-            <span>Valor</span>
-            <span />
-          </li>
+        <>
+          <div className="contas-progresso">
+            <div className="spend-head">
+              <span>
+                <b>{quantasPagas}</b> de {contas.length} {contas.length === 1 ? "conta paga" : "contas pagas"}
+              </span>
+              <span>{quantasPagas === contas.length ? "Tudo pago!" : `Falta ${fmt(totalPendente)}`}</span>
+            </div>
+            <div className="spend-track">
+              <div className="spend-fill ok" style={{ width: `${(quantasPagas / contas.length) * 100}%` }} />
+            </div>
+          </div>
 
-          {contas.map((c) => {
-            const chave = `conta:${c.id}`;
-            const paga = pagos.includes(chave);
-            const situacao = ehMesAtual ? situacaoConta({ dia: c.dia, mes, paga }) : paga ? "paga" : "futura";
+          <ul className="linhas linhas--contas">
+            <li className="linhas-cabecalho" aria-hidden="true">
+              <span>Pago</span>
+              <span>Conta</span>
+              <span>Categoria</span>
+              <span>Valor</span>
+              <span />
+            </li>
 
-            if (editando === c.id) {
+            {contas.map((c) => {
+              const chave = `conta:${c.id}`;
+              const paga = pagos.includes(chave);
+              const situacao = ehMesAtual ? situacaoConta({ dia: c.dia, mes, paga }) : paga ? "paga" : "futura";
+
+              if (editando === c.id) {
+                return (
+                  <li key={c.id} className="linha-edicao">
+                    <div className="edit-row">
+                      <div className="input-wrap">
+                        <input type="text" value={eNome} maxLength={80} aria-label="Nome" onChange={(e) => setENome(e.target.value)} />
+                      </div>
+                      <div className="input-wrap short">
+                        <span className="input-affix">R$</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          inputMode="decimal"
+                          value={eValor || ""}
+                          aria-label="Valor"
+                          onChange={(e) => setEValor(numero(e.target.value))}
+                        />
+                      </div>
+                      <div className="input-wrap tiny">
+                        <input
+                          type="number"
+                          min={1}
+                          max={31}
+                          inputMode="numeric"
+                          value={eDia}
+                          aria-label="Dia do vencimento"
+                          onChange={(e) => setEDia(e.target.value)}
+                        />
+                      </div>
+                      <SelectCategoria value={eCategoria} onChange={setECategoria} rotulo="Categoria" />
+                    </div>
+
+                    <p className="field-hint">A mudança vale deste mês em diante. Os meses anteriores ficam como estavam.</p>
+                    {erroEdicao && <p className="auth-msg error">{erroEdicao}</p>}
+
+                    <div className="edit-actions">
+                      <button className="btn btn-primary btn-sm" onClick={() => salvarEdicao(c)}>
+                        Salvar
+                      </button>
+                      <button className="btn btn-outline btn-sm" onClick={() => setEditando(null)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </li>
+                );
+              }
+
               return (
-                <li key={c.id} className="linha-edicao">
-                  <div className="edit-row">
-                    <div className="input-wrap">
-                      <input type="text" value={eNome} maxLength={80} aria-label="Nome" onChange={(e) => setENome(e.target.value)} />
-                    </div>
-                    <div className="input-wrap short">
-                      <span className="input-affix">R$</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        inputMode="decimal"
-                        value={eValor || ""}
-                        aria-label="Valor"
-                        onChange={(e) => setEValor(numero(e.target.value))}
-                      />
-                    </div>
-                    <div className="input-wrap tiny">
-                      <input
-                        type="number"
-                        min={1}
-                        max={31}
-                        inputMode="numeric"
-                        value={eDia}
-                        aria-label="Dia do vencimento"
-                        onChange={(e) => setEDia(e.target.value)}
-                      />
-                    </div>
-                    <SelectCategoria value={eCategoria} onChange={setECategoria} rotulo="Categoria" />
+                <li key={c.id} className={`linha conta-item--${situacao}`}>
+                  <input
+                    type="checkbox"
+                    className="conta-check"
+                    checked={paga}
+                    onChange={(e) => onPagar(chave, e.target.checked)}
+                    aria-label={`${c.nome} paga`}
+                    title={paga ? "Desmarcar como paga" : "Marcar como paga"}
+                  />
+
+                  <div className="conta-info">
+                    <span className="conta-nome" title={c.nome}>
+                      {c.nome}
+                    </span>
+                    <span className="conta-prazo">
+                      {paga
+                        ? "Paga"
+                        : ehMesAtual
+                        ? `Dia ${c.dia} · ${textoVencimento(diasAteVencimento(c.dia, mes))}`
+                        : `Vence dia ${c.dia}`}
+                    </span>
                   </div>
 
-                  <p className="field-hint">A mudança vale deste mês em diante. Os meses anteriores ficam como estavam.</p>
-                  {erroEdicao && <p className="auth-msg error">{erroEdicao}</p>}
+                  <span className="linha-cat">{c.categoria && <ChipCategoria categoria={c.categoria} />}</span>
 
-                  <div className="edit-actions">
-                    <button className="btn btn-primary btn-sm" onClick={() => salvarEdicao(c)}>
-                      Salvar
+                  <span className="expense-value linha-valor">{fmt(c.valor)}</span>
+
+                  <span className="linha-acoes">
+                    <button className="btn-icon" onClick={() => iniciarEdicao(c)} aria-label={`Editar ${c.nome}`} title="Editar">
+                      <IconeLapis size={16} />
                     </button>
-                    <button className="btn btn-outline btn-sm" onClick={() => setEditando(null)}>
-                      Cancelar
+
+                    <button
+                      className="btn-icon btn-icon--danger"
+                      onClick={() => onRemover(c)}
+                      aria-label={`Remover ${c.nome}`}
+                      title="Remover deste mês em diante"
+                    >
+                      <IconeX size={16} />
                     </button>
-                  </div>
+                  </span>
                 </li>
               );
-            }
+            })}
 
-            return (
-              <li key={c.id} className={`linha conta-item--${situacao}`}>
-                <input
-                  type="checkbox"
-                  className="conta-check"
-                  checked={paga}
-                  onChange={(e) => onPagar(chave, e.target.checked)}
-                  aria-label={`${c.nome} paga`}
-                  title={paga ? "Desmarcar como paga" : "Marcar como paga"}
-                />
-
-                <div className="conta-info">
-                  <span className="conta-nome" title={c.nome}>
-                    {c.nome}
-                  </span>
-                  <span className="conta-prazo">
-                    {paga
-                      ? "Paga"
-                      : ehMesAtual
-                      ? `Dia ${c.dia} · ${textoVencimento(diasAteVencimento(c.dia, mes))}`
-                      : `Vence dia ${c.dia}`}
-                  </span>
-                </div>
-
-                <span className="linha-cat">{c.categoria && <ChipCategoria categoria={c.categoria} />}</span>
-
-                <span className="expense-value linha-valor">{fmt(c.valor)}</span>
-
-                <span className="linha-acoes">
-                  <button className="btn-icon" onClick={() => iniciarEdicao(c)} aria-label={`Editar ${c.nome}`} title="Editar">
-                    <Icon size={16}>
-                      <path d="M12 20h9" />
-                      <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-                    </Icon>
-                  </button>
-
-                  <button
-                    className="btn-icon btn-icon--danger"
-                    onClick={() => onRemover(c)}
-                    aria-label={`Remover ${c.nome}`}
-                    title="Remover deste mês em diante"
-                  >
-                    <Icon size={16}>
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </Icon>
-                  </button>
-                </span>
-              </li>
-            );
-          })}
-
-          <li className="expense-total">
-            <span>Total das contas fixas</span>
-            <span>{fmt(total)}</span>
-          </li>
-
-          {totalPendente > 0 && totalPendente < total && (
-            <li className="conta-pendente">
-              <span>Ainda falta pagar</span>
-              <span>{fmt(totalPendente)}</span>
+            <li className="expense-total">
+              <span>Total das contas fixas</span>
+              <span>{fmt(total)}</span>
             </li>
-          )}
-        </ul>
+          </ul>
+        </>
       )}
     </Raiz>
   );

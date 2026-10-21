@@ -2,7 +2,8 @@
 
 import { economiaPotencial, type Dica } from "@/lib/dicas";
 import { OPCOES, type Passo } from "@/lib/investimentos";
-import { Icon, fmt } from "./ui";
+import { IconeEscudo, IconeLampada, IconeTendencia } from "./icones";
+import { Icon, Vazio, fmt } from "./ui";
 
 const ROTULO_TIPO = { cortar: "Cortar", atencao: "Atenção", ok: "Tudo certo" } as const;
 
@@ -24,13 +25,18 @@ export function PainelDicas({
   return (
     <div className="dicas-layout">
       <section className="card">
-        <div className="panel-head">
-          <h2 className="panel-title">Onde dá para gastar menos em {mesLabel}</h2>
-          <p className="panel-sub">Calculado com os números que você lançou. Quanto mais completo o mês, melhores as dicas.</p>
+        <div className="panel-head panel-head--icone">
+          <span className="panel-icone panel-icone--amber" aria-hidden="true">
+            <IconeLampada size={20} />
+          </span>
+          <div>
+            <h2 className="panel-title">Onde dá para gastar menos em {mesLabel}</h2>
+            <p className="panel-sub">Calculado com os números que você lançou. Quanto mais completo o mês, melhores as dicas.</p>
+          </div>
         </div>
 
         {dicas.length === 0 ? (
-          <div className="empty-state">Preencha a renda e os gastos do mês para receber dicas personalizadas.</div>
+          <Vazio texto="Preencha a renda e os gastos do mês para receber dicas personalizadas." />
         ) : (
           <div className="dicas-corpo">
             {temCortes && economia > 0 && (
@@ -58,9 +64,14 @@ export function PainelDicas({
       </section>
 
       <section className="card">
-        <div className="panel-head">
-          <h2 className="panel-title">Guardando com segurança</h2>
-          <p className="panel-sub">A ordem de prioridades que educadores financeiros costumam ensinar, com a sua situação.</p>
+        <div className="panel-head panel-head--icone">
+          <span className="panel-icone panel-icone--teal" aria-hidden="true">
+            <IconeEscudo size={20} />
+          </span>
+          <div>
+            <h2 className="panel-title">Guardando com segurança</h2>
+            <p className="panel-sub">A ordem de prioridades que educadores financeiros costumam ensinar, com a sua situação.</p>
+          </div>
         </div>
 
         <ol className="passos">
@@ -87,9 +98,14 @@ export function PainelDicas({
       </section>
 
       <section className="card">
-        <div className="panel-head">
-          <h2 className="panel-title">Opções de renda fixa de baixo risco</h2>
-          <p className="panel-sub">Cada uma serve a um prazo diferente. Não há uma &quot;melhor&quot; para tudo: depende de quando você vai precisar do dinheiro.</p>
+        <div className="panel-head panel-head--icone">
+          <span className="panel-icone panel-icone--blue" aria-hidden="true">
+            <IconeTendencia size={20} />
+          </span>
+          <div>
+            <h2 className="panel-title">Opções de renda fixa de baixo risco</h2>
+            <p className="panel-sub">Cada uma serve a um prazo diferente. Não há uma &quot;melhor&quot; para tudo: depende de quando você vai precisar do dinheiro.</p>
+          </div>
         </div>
 
         <div className="opcoes-grid">

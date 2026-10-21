@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { FILTRO_VAZIO, type FiltroGastos } from "@/lib/filtro";
+import { Dinheiro } from "./animacao";
+import { IconeBusca, IconeCalendario, IconeCarteira } from "./icones";
 import { SelectCategoria } from "./lista-gastos";
-import { fmt } from "./ui";
 
 export type AbaLancamento = "contas" | "cartao" | "outros";
 
@@ -12,9 +13,14 @@ export interface ResumoAba {
   rotulo: string;
   quantidade: number;
   total: number;
-  /** pontinho colorido ao lado do nome da aba */
-  cor?: string;
 }
+
+const ICONE_ABA: Record<AbaLancamento, React.ReactNode> = {
+  contas: <IconeCalendario size={17} />,
+  // eslint-disable-next-line @next/next/no-img-element
+  cartao: <img src="/nubank-card.png" alt="" width={26} height={17} className="lancamento-cartao" />,
+  outros: <IconeCarteira size={17} />,
+};
 
 /**
  * Tudo que se lança no mês em um só cartão com abas (contas fixas, cartão, avulsos),
@@ -38,28 +44,40 @@ export function Lancamentos({
 
   return (
     <section className="card lancamentos">
+      <div className="panel-head lancamentos-cabeca">
+        <h2 className="panel-title">Lançamentos do mês</h2>
+        <p className="panel-sub">Contas fixas, compras no cartão e gastos avulsos.</p>
+      </div>
+
       <div className="lancamentos-abas" role="tablist" aria-label="Lançamentos do mês">
         {abas.map((a) => (
           <button
             key={a.id}
             role="tab"
             aria-selected={ativa === a.id}
-            className="lancamento-aba"
+            className={`lancamento-aba lancamento-aba--${a.id}`}
             onClick={() => setAtiva(a.id)}
           >
-            <span className="lancamento-rotulo">
-              {a.cor && <span className="chip-cat-dot" style={{ background: a.cor }} />}
-              {a.rotulo}
-              <span className="lancamento-qtd">{a.quantidade}</span>
+            <span className="lancamento-icone">{ICONE_ABA[a.id]}</span>
+            <span className="lancamento-textos">
+              <span className="lancamento-rotulo">
+                {a.rotulo}
+                <span className="lancamento-qtd">{a.quantidade}</span>
+              </span>
+              <span className="lancamento-total">
+                <Dinheiro valor={a.total} />
+              </span>
             </span>
-            <span className="lancamento-total">{fmt(a.total)}</span>
           </button>
         ))}
       </div>
 
       {compras && temCompras && (
         <div className="filtro-barra">
-          <div className="input-wrap">
+          <div className="input-wrap input-wrap--busca">
+            <span className="input-affix">
+              <IconeBusca size={16} />
+            </span>
             <input
               type="search"
               placeholder="Buscar compra pelo nome"
@@ -77,14 +95,14 @@ export function Lancamentos({
           />
 
           {(filtro.texto || filtro.categoria) && (
-            <button className="btn btn-outline btn-sm" onClick={() => onFiltro(FILTRO_VAZIO)}>
+            <button className="btn btn-ghost btn-sm" onClick={() => onFiltro(FILTRO_VAZIO)}>
               Limpar
             </button>
           )}
         </div>
       )}
 
-      <div className="lancamentos-corpo" role="tabpanel">
+      <div className="lancamentos-corpo" role="tabpanel" key={ativa}>
         {conteudo[ativa]}
       </div>
     </section>

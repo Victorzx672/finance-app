@@ -1,11 +1,14 @@
 "use client";
 
-import { MESES_CURTOS, anoDe, labelMes, montarMes, numeroDoMes } from "@/lib/meses";
+import { useEffect, useRef, useState } from "react";
+import { MESES_CURTOS, anoDe, labelMes, montarMes } from "@/lib/meses";
+import { somarMes } from "@/lib/parcelas";
+import { IconeCalendario, IconeSetaBaixo, IconeSetaDir, IconeSetaEsq } from "./icones";
 
 /**
- * Escolha de mês em dois passos: o ano (com setas) e os 12 meses como botões.
- * O mês escolhido fica azul, o mês de hoje ganha um contorno e os meses que já
- * têm dados salvos mostram um pontinho.
+ * Escolha do mês: setas para o mês anterior/próximo e um calendário que abre por cima,
+ * com o ano (setas) e os 12 meses. O mês escolhido fica destacado, o mês de hoje ganha
+ * um contorno e os meses que já têm dados salvos mostram um pontinho.
  */
 export function SeletorMes({
   mes,
@@ -24,68 +27,123 @@ export function SeletorMes({
   anoMax: number;
   onChange: (mes: string) => void;
 }) {
-  const ano = anoDe(mes);
-  const numero = numeroDoMes(mes);
+  const [aberto, setAberto] = useState(false);
+  const [anoVisto, setAnoVisto] = useState(anoDe(mes));
+  const raiz = useRef<HTMLDivElement>(null);
 
-  // Trocar de ano mantém o mesmo mês (outubro de 2026 -> outubro de 2025)
-  const irParaAno = (novo: number) => onChange(montarMes(novo, numero));
+  const anterior = somarMes(mes, -1);
+  const proximo = somarMes(mes, 1);
+
+  useEffect(() => {
+    if (!aberto) return;
+
+    const fora = (e: PointerEvent) => {
+      if (!raiz.current?.contains(e.target as Node)) setAberto(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAberto(false);
+
+    document.addEventListener("pointerdown", fora);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", fora);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [aberto]);
+
+  const alternar = () => {
+    setAnoVisto(anoDe(mes));
+    setAberto((v) => !v);
+  };
+
+  const escolher = (chave: string) => {
+    setAberto(false);
+    onChange(chave);
+  };
 
   return (
-    <div className="seletor-mes">
-      <div className="seletor-topo">
-        <div className="seletor-ano" role="group" aria-label="Ano">
-          <button
-            className="month-btn"
-            onClick={() => irParaAno(ano - 1)}
-            disabled={ano <= anoMin}
-            aria-label="Ano anterior"
-          >
-            ‹
-          </button>
+    <div className="seletor-mes" ref={raiz}>
+      <div className="seletor-controle">
+        <button
+          className="seletor-seta"
+          onClick={() => onChange(anterior)}
+          disabled={anoDe(anterior) < anoMin}
+          aria-label={`Mês anterior (${labelMes(anterior)})`}
+          title="Mês anterior (←)"
+        >
+          <IconeSetaEsq size={18} />
+        </button>
 
-          <strong className="seletor-ano-valor" aria-live="polite">
-            {ano}
-          </strong>
+        <button className="seletor-botao" onClick={alternar} aria-haspopup="dialog" aria-expanded={aberto}>
+          <IconeCalendario size={17} />
+          <span aria-live="polite">{labelMes(mes)}</span>
+          <IconeSetaBaixo size={16} />
+        </button>
 
-          <button
-            className="month-btn"
-            onClick={() => irParaAno(ano + 1)}
-            disabled={ano >= anoMax}
-            aria-label="Próximo ano"
-          >
-            ›
-          </button>
-        </div>
-
-        <span className="seletor-titulo">{labelMes(mes)}</span>
-
-        {mes !== mesAtual && (
-          <button className="btn btn-outline btn-sm" onClick={() => onChange(mesAtual)}>
-            Ir para o mês atual
-          </button>
-        )}
+        <button
+          className="seletor-seta"
+          onClick={() => onChange(proximo)}
+          disabled={anoDe(proximo) > anoMax}
+          aria-label={`Próximo mês (${labelMes(proximo)})`}
+          title="Próximo mês (→)"
+        >
+          <IconeSetaDir size={18} />
+        </button>
       </div>
 
-      <div className="seletor-meses" role="group" aria-label="Mês">
-        {MESES_CURTOS.map((nome, i) => {
-          const chave = montarMes(ano, i + 1);
-          const selecionado = chave === mes;
+      {mes !== mesAtual && (
+        <button className="btn btn-ghost btn-sm seletor-hoje" onClick={() => onChange(mesAtual)}>
+          Voltar para hoje
+        </button>
+      )}
 
-          return (
+      {aberto && (
+        <div className="seletor-popover" role="dialog" aria-label="Escolher mês">
+          <div className="seletor-ano" role="group" aria-label="Ano">
             <button
-              key={chave}
-              className={`mes-chip ${selecionado ? "mes-chip--ativo" : ""} ${chave === mesAtual ? "mes-chip--hoje" : ""}`}
-              aria-pressed={selecionado}
-              aria-label={labelMes(chave)}
-              title={labelMes(chave)}
-              onClick={() => onChange(chave)}
+              className="seletor-seta"
+              onClick={() => setAnoVisto(anoVisto - 1)}
+              disabled={anoVisto <= anoMin}
+              aria-label="Ano anterior"
             >
-              {nome}
-              {mesesComDados.has(chave) && <span className="mes-ponto" aria-label="tem dados salvos" />}
+              <IconeSetaEsq size={16} />
             </button>
-          );
-        })}
-      </div>
+            <strong className="seletor-ano-valor">{anoVisto}</strong>
+            <button
+              className="seletor-seta"
+              onClick={() => setAnoVisto(anoVisto + 1)}
+              disabled={anoVisto >= anoMax}
+              aria-label="Próximo ano"
+            >
+              <IconeSetaDir size={16} />
+            </button>
+          </div>
+
+          <div className="seletor-meses" role="group" aria-label="Mês">
+            {MESES_CURTOS.map((nome, i) => {
+              const chave = montarMes(anoVisto, i + 1);
+              const selecionado = chave === mes;
+
+              return (
+                <button
+                  key={chave}
+                  className={`mes-chip ${selecionado ? "mes-chip--ativo" : ""} ${chave === mesAtual ? "mes-chip--hoje" : ""}`}
+                  aria-pressed={selecionado}
+                  aria-label={labelMes(chave)}
+                  title={labelMes(chave)}
+                  onClick={() => escolher(chave)}
+                >
+                  {nome}
+                  {mesesComDados.has(chave) && <span className="mes-ponto" aria-label="tem dados salvos" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="seletor-legenda">
+            <span className="mes-ponto mes-ponto--legenda" /> mês com dados salvos
+          </p>
+        </div>
+      )}
     </div>
   );
 }

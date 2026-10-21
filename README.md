@@ -30,6 +30,8 @@ Controle financeiro pessoal. Next.js + Prisma (PostgreSQL) + NextAuth.
 
 **Conforto:** ocultar valores (olhinho), modo escuro, exportar tudo em CSV (Excel), enviar o resumo do mês por e-mail e instalar no celular (PWA).
 
+**Interface:** menu lateral no computador e abas embaixo no celular; botão **"+"** (ou tecla **N**) para lançar um gasto de qualquer aba, com categorias e pessoas em botões; números com contagem animada, medidor circular do limite de 60%, gráfico de rosca por categoria (passe o mouse para destacar), controle deslizante do % a investir, confirmações em janela própria, "Descartar" alterações não salvas, confete ao concluir uma meta e tela de carregamento. **Atalhos:** N (novo gasto), Ctrl+S (salvar), ← → (mês), 1 a 5 (abas), O (ocultar valores), T (tema) e ? (lista de atalhos).
+
 **Conta:** cadastro com confirmação por e-mail, login por usuário ou e-mail e recuperação de senha.
 
 ## Configuração
@@ -91,6 +93,8 @@ Observações: o app instalado tem login próprio (separado do Safari), então e
 | Adicionar uma categoria | `lib/categorias.ts` |
 | Mudar as contas do resumo | `lib/calculos.ts` e `lib/resumo-mes.ts` (têm testes em `tests/`) |
 | Regras de vencimento | `lib/vencimentos.ts` |
+| Cores, fontes e espaçamentos (claro e escuro) | variáveis no topo de `app/app.css` |
+| Atalhos do teclado | `app/atalhos.tsx` (lista) e o efeito de teclado em `app/painel.tsx` |
 
 ## Testes
 

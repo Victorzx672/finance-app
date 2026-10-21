@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { somar } from "@/lib/calculos";
 import type { RendaFixaItem } from "./dados";
-import { Icon, fmt, numero } from "./ui";
+import { IconeLapis, IconeX } from "./icones";
+import { fmt, numero } from "./ui";
 
 export interface EdicaoRendaFixa {
   nome: string;
@@ -130,10 +131,7 @@ export function RendasFixas({
                 <span className="expense-value">{fmt(r.valor)}</span>
 
                 <button className="btn-icon" onClick={() => iniciarEdicao(r)} aria-label={`Editar ${r.nome}`} title="Editar">
-                  <Icon size={16}>
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-                  </Icon>
+                  <IconeLapis size={16} />
                 </button>
 
                 <button
@@ -142,9 +140,7 @@ export function RendasFixas({
                   aria-label={`Remover ${r.nome}`}
                   title="Remover deste mês em diante"
                 >
-                  <Icon size={16}>
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </Icon>
+                  <IconeX size={16} />
                 </button>
               </li>
             )

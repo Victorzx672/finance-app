@@ -60,6 +60,30 @@ export function Icon({ size = 18, children }: { size?: number; children: React.R
   );
 }
 
+/** Lista vazia: ícone + texto, no lugar de um espaço em branco. */
+export function Vazio({ texto, busca }: { texto: React.ReactNode; busca?: boolean }) {
+  return (
+    <div className="empty-state">
+      <span className="empty-icone" aria-hidden="true">
+        <Icon size={22}>
+          {busca ? (
+            <>
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+            </>
+          ) : (
+            <>
+              <path d="M4 7h16l-1.5 12a2 2 0 01-2 1.8H7.5a2 2 0 01-2-1.8L4 7z" />
+              <path d="M9 7V5a3 3 0 016 0v2" />
+            </>
+          )}
+        </Icon>
+      </span>
+      <p>{texto}</p>
+    </div>
+  );
+}
+
 export const LogoIcon = ({ size }: { size?: number }) => (
   <Icon size={size}>
     <path d="M12 2L2 7l10 5 10-5-10-5z" />

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { CATEGORIAS } from "@/lib/categorias";
 import { filtroAtivo, filtrarGastos, type FiltroGastos } from "@/lib/filtro";
-import { ChipCategoria, ChipPessoa, Icon, fmt, numero, type Gasto } from "./ui";
+import { CATEGORIAS, corDaCategoria } from "@/lib/categorias";
+import { IconeLapis, IconeX } from "./icones";
+import { ChipCategoria, ChipPessoa, Vazio, fmt, numero, type Gasto } from "./ui";
 
 /** Quantas linhas aparecem antes do "Ver todas". */
 const LINHAS_INICIAIS = 10;
@@ -350,9 +351,9 @@ export function ListaGastos({
       </div>
 
       {gastos.length === 0 ? (
-        <div className="empty-state">{vazio}</div>
+        <Vazio texto={vazio} />
       ) : visiveis.length === 0 ? (
-        <div className="empty-state">Nenhum item encontrado com esse filtro.</div>
+        <Vazio texto="Nenhum item encontrado com esse filtro." busca />
       ) : (
         <ul className="linhas">
           <li className="linhas-cabecalho" aria-hidden="true">
@@ -428,7 +429,11 @@ export function ListaGastos({
                 </div>
               </li>
             ) : (
-              <li key={gasto.id} className="linha">
+              <li
+                key={gasto.id}
+                className="linha"
+                style={{ "--cor": gasto.categoria ? corDaCategoria(gasto.categoria) : "transparent" } as React.CSSProperties}
+              >
                 <span className="linha-data" title="Data da compra">
                   {gasto.dia ? `${String(gasto.dia).padStart(2, "0")}/${mm}` : "—"}
                 </span>
@@ -454,10 +459,7 @@ export function ListaGastos({
                     aria-label={`Editar ${gasto.nome}`}
                     title="Editar"
                   >
-                    <Icon size={16}>
-                      <path d="M12 20h9" />
-                      <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-                    </Icon>
+                    <IconeLapis size={16} />
                   </button>
 
                   <button
@@ -466,9 +468,7 @@ export function ListaGastos({
                     aria-label={`Remover ${gasto.nome}`}
                     title={gasto.parcela ? "Remover a compra parcelada inteira" : "Remover"}
                   >
-                    <Icon size={16}>
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </Icon>
+                    <IconeX size={16} />
                   </button>
                 </span>
               </li>
