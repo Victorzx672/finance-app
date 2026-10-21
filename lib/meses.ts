@@ -16,7 +16,7 @@ export const labelMes = (chave: string) =>
 export const labelCurto = (chave: string) =>
   dataDoMes(chave)
     .toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
-    .replace(/\.?\s*de\s*/, "/")
+    .replace(/\.?\s+de\s+/, "/") // só o " de " separado: o "de" de "dez" fica
     .replace(".", "");
 
 // ─── Seletor de mês e ano ─────────────────────────────────────────────────────

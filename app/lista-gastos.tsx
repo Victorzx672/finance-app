@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { filtroAtivo, filtrarGastos, type FiltroGastos } from "@/lib/filtro";
+import { labelCurto } from "@/lib/meses";
+import { somarMes } from "@/lib/parcelas";
 import { CATEGORIAS, corDaCategoria } from "@/lib/categorias";
 import { IconeLapis, IconeX } from "./icones";
 import { ChipCategoria, ChipPessoa, Vazio, fmt, numero, type Gasto } from "./ui";
@@ -133,7 +135,11 @@ export function ListaGastos({
   const [parcelado, setParcelado] = useState(false);
   const [atual, setAtual] = useState("1");
   const [total, setTotal] = useState("2");
+  // valor total da compra parcelada (opcional): se preenchido, calcula a parcela
+  const [totalCompra, setTotalCompra] = useState(0);
   const [erro, setErro] = useState("");
+  // cartão: mostrar todas as compras, só as à vista ou só as parceladas
+  const [tipo, setTipo] = useState<"todas" | "vista" | "parceladas">("todas");
 
   const [editando, setEditando] = useState<string | number | null>(null);
   const [editNome, setEditNome] = useState("");
@@ -144,8 +150,10 @@ export function ListaGastos({
   const [erroEdicao, setErroEdicao] = useState("");
   const [verTodas, setVerTodas] = useState(false);
 
-  const visiveis = filtrarGastos(gastos, filtro);
-  const filtrando = filtroAtivo(filtro);
+  const porTipo = tipo === "todas" ? gastos : gastos.filter((g) => (tipo === "parceladas") === !!g.parcela);
+  const visiveis = filtrarGastos(porTipo, filtro);
+  const filtrando = filtroAtivo(filtro) || tipo !== "todas";
+  const temParcelas = gastos.some((g) => g.parcela);
   const somaLista = visiveis.reduce((acc, g) => acc + g.valor, 0);
   // A linha em edição nunca fica escondida atrás do "Ver todas"
   const mostradas =
@@ -158,6 +166,11 @@ export function ListaGastos({
   const nAtual = Math.floor(Number(atual)) || 0;
   const nTotal = Math.floor(Number(total)) || 0;
   const parcelasOk = nTotal >= 2 && nTotal <= 60 && nAtual >= 1 && nAtual <= nTotal;
+
+  /** Com o valor total preenchido, a parcela é calculada (total ÷ número de parcelas). */
+  const calcularParcela = (totalDaCompra: number, parcelas: number) => {
+    if (totalDaCompra > 0 && parcelas >= 2) setValor(Math.round((totalDaCompra / parcelas) * 100) / 100);
+  };
 
   const adicionar = async () => {
     if (!nome.trim() || valor <= 0) return;
@@ -180,6 +193,7 @@ export function ListaGastos({
       setParcelado(false);
       setAtual("1");
       setTotal("2");
+      setTotalCompra(0);
     } else {
       onAdicionar(nome.trim(), valor, categoria || null, lerDia(dia), pessoa || null);
     }
@@ -241,6 +255,21 @@ export function ListaGastos({
       {extra}
 
       <div className="expense-form">
+        <div className="form-cabeca">
+          <span className="form-titulo">{parcelavel ? "Nova compra no cartão" : "Novo gasto"}</span>
+
+          {parcelavel && (
+            <div className="segmentos segmentos--mini" role="radiogroup" aria-label="Forma de pagamento">
+              <button type="button" role="radio" aria-checked={!parcelado} className="segmento" onClick={() => setParcelado(false)}>
+                À vista
+              </button>
+              <button type="button" role="radio" aria-checked={parcelado} className="segmento" onClick={() => setParcelado(true)}>
+                Parcelado
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="expense-add-row">
           <div className="input-wrap">
             <input
@@ -263,8 +292,12 @@ export function ListaGastos({
               inputMode="decimal"
               placeholder={parcelado ? "Parcela" : "0,00"}
               aria-label={parcelado ? `Valor da parcela - ${titulo}` : `Valor - ${titulo}`}
+              title={parcelado ? "Valor de cada parcela, como aparece na fatura" : undefined}
               value={valor || ""}
-              onChange={(e) => setValor(numero(e.target.value))}
+              onChange={(e) => {
+                setValor(numero(e.target.value));
+                setTotalCompra(0);
+              }}
               onKeyDown={aoTeclar}
             />
           </div>
@@ -297,13 +330,6 @@ export function ListaGastos({
           </button>
         </div>
 
-        {parcelavel && (
-          <label className="check-row">
-            <input type="checkbox" checked={parcelado} onChange={(e) => setParcelado(e.target.checked)} />
-            Compra parcelada
-          </label>
-        )}
-
         {parcelavel && parcelado && (
           <div className="parcelas-box">
             <div className="parcelas-fields">
@@ -332,23 +358,74 @@ export function ListaGastos({
                     max={60}
                     inputMode="numeric"
                     value={total}
-                    onChange={(e) => setTotal(e.target.value)}
+                    onChange={(e) => {
+                      setTotal(e.target.value);
+                      calcularParcela(totalCompra, Math.floor(Number(e.target.value)) || 0);
+                    }}
                     aria-label="Total de parcelas"
+                  />
+                </div>
+              </label>
+
+              <label className="parcelas-total">
+                Valor total (opcional)
+                <div className="input-wrap">
+                  <span className="input-affix">R$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    placeholder="Calcula a parcela"
+                    value={totalCompra || ""}
+                    onChange={(e) => {
+                      const v = numero(e.target.value);
+                      setTotalCompra(v);
+                      calcularParcela(v, nTotal);
+                    }}
+                    aria-label="Valor total da compra"
                   />
                 </div>
               </label>
             </div>
 
-            <p className="field-hint">
-              {parcelasOk && valor > 0
-                ? `${nTotal}x de ${fmt(valor)}. Entra neste mês como ${nAtual}/${nTotal} e aparece em mais ${nTotal - nAtual} ${nTotal - nAtual === 1 ? "mês" : "meses"}.`
-                : "Digite o valor de cada parcela, como aparece na fatura. Já está na 4ª de 10? Coloque 4 e 10."}
-            </p>
+            {parcelasOk && valor > 0 ? (
+              <p className="parcelas-previa">
+                <b>
+                  {nTotal}x de {fmt(valor)}
+                </b>{" "}
+                = {fmt(valor * nTotal)} · entra agora como {nAtual}/{nTotal}
+                {nTotal > nAtual
+                  ? ` · última parcela em ${labelCurto(somarMes(mes, nTotal - nAtual))}`
+                  : " · é a última parcela"}
+              </p>
+            ) : (
+              <p className="field-hint">
+                Digite o valor de cada parcela (ou o valor total, que ele divide). Já está na 4ª de 10? Coloque 4 e 10.
+              </p>
+            )}
           </div>
         )}
 
         {erro && <p className="auth-msg error">{erro}</p>}
       </div>
+
+      {parcelavel && temParcelas && (
+        <div className="segmentos segmentos--mini lista-tipos" role="radiogroup" aria-label="Mostrar compras">
+          {(
+            [
+              ["todas", "Todas", gastos.length],
+              ["vista", "À vista", gastos.filter((g) => !g.parcela).length],
+              ["parceladas", "Parceladas", gastos.filter((g) => g.parcela).length],
+            ] as const
+          ).map(([id, rotulo, qtd]) => (
+            <button key={id} type="button" role="radio" aria-checked={tipo === id} className="segmento" onClick={() => setTipo(id)}>
+              {rotulo}
+              <span className="lancamento-qtd">{qtd}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {gastos.length === 0 ? (
         <Vazio texto={vazio} />
@@ -441,8 +518,11 @@ export function ListaGastos({
                 <span className="linha-nome" title={gasto.nome}>
                   <span className="linha-texto">{gasto.nome}</span>
                   {gasto.parcela && (
-                    <span className="expense-badge" title="Parcela deste mês">
+                    <span className="badge-parcela" title={`Parcela ${gasto.parcela.numero} de ${gasto.parcela.total}`}>
                       {gasto.parcela.numero}/{gasto.parcela.total}
+                      <span className="badge-parcela-barra">
+                        <span style={{ width: `${(gasto.parcela.numero / gasto.parcela.total) * 100}%` }} />
+                      </span>
                     </span>
                   )}
                   {gasto.pessoa && <ChipPessoa pessoa={gasto.pessoa} />}

@@ -54,6 +54,9 @@ describe("meses", () => {
     expect(labelMes("2026-10")).toBe("Outubro de 2026");
     expect(labelMes("2027-03")).toBe("Março de 2027");
     expect(labelCurto("2026-10")).toBe("out/26");
+    // "dez" começa com "de": não pode virar "/z de 26"
+    expect(labelCurto("2026-12")).toBe("dez/26");
+    expect(labelCurto("2027-01")).toBe("jan/27");
   });
 
   it("separa e monta ano e mês", () => {

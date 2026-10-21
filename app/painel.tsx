@@ -1354,12 +1354,18 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                           extra={
                             <>
                               <CartaoInfo
+                                nome={CARTAO}
                                 mes={mesSelecionado}
                                 config={configCartao}
-                                usado={totalNubank}
+                                compras={gastosNubank}
                                 ehMesAtual={ehMesAtual}
                                 paga={faturaPaga}
+                                categoriaFiltrada={filtro.categoria}
                                 onPagar={(pago) => pagar(`fatura:${CARTAO}`, pago)}
+                                onFiltrarCategoria={(c) =>
+                                  setFiltro((f) => ({ ...f, categoria: f.categoria === c ? "" : c }))
+                                }
+                                onConfigurar={() => irParaAba("prefs")}
                               />
 
                               <ImportarFatura
