@@ -204,9 +204,9 @@ export function PainelCategorias({
                   onMouseLeave={() => setAtiva(null)}
                 >
                   <div className="cat-head">
-                    <span className="cat-nome">
+                    <span className="cat-nome" title={l.nome}>
                       <span className="cat-dot" style={{ background: l.cor }} />
-                      {l.nome}
+                      <span className="cat-nome-texto">{l.nome}</span>
                     </span>
                     <span className={`cat-valor ${acima ? "cat-valor--acima" : ""}`}>
                       {fmt(l.valor)}
@@ -395,7 +395,9 @@ export function PainelPessoas({ linhas }: { linhas: LinhaPessoa[] }) {
               </span>
               <div className="pessoa-dados">
                 <div className="cat-head">
-                  <span className="cat-nome">{l.nome}</span>
+                  <span className="cat-nome" title={l.nome}>
+                    <span className="cat-nome-texto">{l.nome}</span>
+                  </span>
                   <span className="cat-valor">
                     {fmt(l.valor)}
                     <small>{l.percentual.toFixed(0)}%</small>

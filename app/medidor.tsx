@@ -82,42 +82,44 @@ export function CartaoLimite({
 
   return (
     <section className="card limite-card" aria-label="Gastos em relação à renda">
-      <Anel percentual={percentual} status={status} marca={LIMITE_GASTOS_PERCENT}>
-        <strong className="anel-valor">{p.toFixed(0)}%</strong>
-        <span className="anel-rotulo">da renda</span>
-      </Anel>
+      <div className="limite-corpo">
+        <Anel percentual={percentual} status={status} marca={LIMITE_GASTOS_PERCENT}>
+          <strong className="anel-valor">{p.toFixed(0)}%</strong>
+          <span className="anel-rotulo">da renda</span>
+        </Anel>
 
-      <div className="limite-info">
-        <span className={`pilula pilula--${status}`}>{ROTULO_STATUS[status]}</span>
+        <div className="limite-info">
+          <span className={`pilula pilula--${status}`}>{ROTULO_STATUS[status]}</span>
 
-        <dl className="limite-numeros">
-          <div>
-            <dt>Gastos do mês</dt>
-            <dd>
-              <Dinheiro valor={totalGastos} />
-            </dd>
-          </div>
-          <div>
-            <dt>Limite ({LIMITE_GASTOS_PERCENT}% da renda)</dt>
-            <dd>{fmt(limite)}</dd>
-          </div>
-          <div>
-            <dt>Renda do mês</dt>
-            <dd>{fmt(renda)}</dd>
-          </div>
-        </dl>
+          <dl className="limite-numeros">
+            <div>
+              <dt>Gastos do mês</dt>
+              <dd>
+                <Dinheiro valor={totalGastos} />
+              </dd>
+            </div>
+            <div>
+              <dt>Limite ({LIMITE_GASTOS_PERCENT}% da renda)</dt>
+              <dd>{fmt(limite)}</dd>
+            </div>
+            <div>
+              <dt>Renda do mês</dt>
+              <dd>{fmt(renda)}</dd>
+            </div>
+          </dl>
 
-        {status !== "sem-renda" ? (
-          <p className={`limite-folga limite-folga--${status}`}>
-            {folga > 0
-              ? `Ainda pode gastar ${fmt(folga)}`
-              : folga === 0
-              ? "Você chegou ao limite"
-              : `${fmt(-folga)} acima do limite`}
-          </p>
-        ) : (
-          <p className="limite-folga">Cadastre sua renda para acompanhar o limite.</p>
-        )}
+          {status !== "sem-renda" ? (
+            <p className={`limite-folga limite-folga--${status}`}>
+              {folga > 0
+                ? `Ainda pode gastar ${fmt(folga)}`
+                : folga === 0
+                ? "Você chegou ao limite"
+                : `${fmt(-folga)} acima do limite`}
+            </p>
+          ) : (
+            <p className="limite-folga">Cadastre sua renda para acompanhar o limite.</p>
+          )}
+        </div>
       </div>
     </section>
   );
