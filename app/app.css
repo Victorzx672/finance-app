@@ -1203,6 +1203,24 @@ button { -webkit-user-select: none; user-select: none; }
 .badge-parcela { flex-shrink: 0; display: inline-flex; flex-direction: column; gap: 2px; padding: 2px 8px 3px; border-radius: 8px; background: var(--purple-soft); color: var(--purple); font-size: 11.5px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .badge-parcela-barra { height: 3px; border-radius: 99px; background: color-mix(in srgb, var(--purple) 25%, transparent); overflow: hidden; }
 .badge-parcela-barra span { display: block; height: 100%; border-radius: 99px; background: var(--purple); }
+
+/* Formulário de compra: rótulos visíveis, categoria e pessoa em botões, atalhos de dia */
+.form-compra { gap: 14px; }
+.form-compra .field { gap: 5px; min-width: 0; }
+.form-compra .field-label { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 12.5px; font-weight: 700; color: var(--text-2); }
+.form-compra-principal { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, 200px); gap: 10px; }
+.input-wrap--valor input { font: 700 17px var(--font-titulo); letter-spacing: -0.01em; }
+.input-wrap--erro, .input-wrap--erro:hover { border-color: var(--red); box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 14%, transparent); animation: tremer 0.35s; }
+.form-compra-grupo { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.form-compra-linha { display: flex; flex-wrap: wrap; gap: 14px 28px; }
+.form-compra-dia { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.form-compra-dia .input-wrap.tiny { flex: 0 0 72px; }
+.form-compra-dia .input-wrap.tiny input { height: 32px; font-size: 14px; }
+.form-compra-rodape { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px 12px; }
+.form-compra-ok { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--green); }
+.form-compra-ok:not(:empty) { animation: entra 0.3s var(--ease) both; }
+.tag-sugerida { padding: 1px 8px; border-radius: 99px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 700; text-transform: none; letter-spacing: 0; }
+.chips-grupo legend { display: inline-flex; align-items: center; gap: 8px; }
 .parcelas-fields label { flex: 1 1 96px; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
 .parcelas-fields .input-wrap input { width: 100%; }
 .parcelas-de { padding-bottom: 12px; color: var(--muted); font-size: 14px; flex-shrink: 0; }
@@ -1464,6 +1482,9 @@ button { -webkit-user-select: none; user-select: none; }
 }
 
 @container lancamentos (max-width: 480px) {
+  .form-compra-principal { grid-template-columns: minmax(0, 1fr); }
+  .form-compra-rodape .btn-add { flex: 1 1 auto; margin-left: 0; }
+  .lista-tipos .segmento { flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px 8px; }
   .lancamentos-corpo { padding: 14px 12px 8px; }
   .filtro-barra { padding: 10px 12px; }
 }
@@ -1876,6 +1897,14 @@ button { -webkit-user-select: none; user-select: none; }
 .barra-salvar-texto { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; white-space: nowrap; }
 .barra-salvar-acoes { display: flex; gap: 6px; }
 .barra-salvar .btn-primary { min-width: 92px; }
+.so-estreito { display: none; }
+
+@media (max-width: 400px) {
+  .barra-salvar .so-largo { display: none; }
+  .barra-salvar .so-estreito { display: inline; }
+  .barra-salvar .btn-sm { padding: 0 10px; }
+  .barra-salvar .btn-primary { min-width: 76px; }
+}
 
 /* ══ Carregando e confete ══════════════════════════════════ */
 
@@ -1963,6 +1992,7 @@ button { -webkit-user-select: none; user-select: none; }
 @keyframes barra-cresce { from { transform: scaleX(0); } }
 @keyframes barra-sobe-y { from { transform: scaleY(0); } }
 @keyframes check-pop { 50% { transform: scale(1.2); } }
+@keyframes tremer { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 
 ::view-transition-old(root),
 ::view-transition-new(root) { animation-duration: 0.35s; }

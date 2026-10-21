@@ -1348,6 +1348,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                           vazio="Nenhuma compra no cartão neste mês."
                           parcelavel
                           pessoas={prefs.pessoas}
+                          aprenderDe={todosGastos}
                           mes={mesSelecionado}
                           filtro={filtro}
                           gastos={gastosNubank}
@@ -1390,6 +1391,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                           placeholder="O que você comprou?"
                           vazio="Nenhum gasto anotado neste mês."
                           pessoas={prefs.pessoas}
+                          aprenderDe={todosGastos}
                           mes={mesSelecionado}
                           filtro={filtro}
                           gastos={gastosAvulsos}
@@ -1502,7 +1504,11 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
         <div className="barra-salvar" role="status">
           <span className="barra-salvar-texto">
             <span className="save-dot" />
-            Alterações <strong>não salvas</strong>
+            <span className="so-largo">
+              Alterações <strong>não salvas</strong>
+            </span>
+            {/* celular estreito: texto curto para os botões caberem */}
+            <strong className="so-estreito">Não salvo</strong>
           </span>
           <div className="barra-salvar-acoes">
             <button className="btn btn-ghost btn-sm" onClick={descartar} disabled={salvando}>
@@ -1539,6 +1545,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
           ehMesAtual={ehMesAtual}
           cartao={CARTAO}
           pessoas={prefs.pessoas}
+          aprenderDe={todosGastos}
           onFechar={() => setNovoGasto(false)}
           onAdicionar={lancarRapido}
         />

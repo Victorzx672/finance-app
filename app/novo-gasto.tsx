@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CATEGORIAS, corDaCategoria } from "@/lib/categorias";
 import { labelMes } from "@/lib/meses";
+import { sugerirPeloNome, type CompraConhecida } from "@/lib/sugestao";
 import { Modal } from "./modal";
 import { fmt, numero } from "./ui";
 
@@ -28,9 +29,12 @@ export function NovoGasto({
   ehMesAtual,
   cartao,
   pessoas,
+  aprenderDe,
   onFechar,
   onAdicionar,
 }: {
+  /** compras já lançadas, para sugerir categoria e pessoa pelo nome */
+  aprenderDe: CompraConhecida[];
   mes: string;
   ehMesAtual: boolean;
   cartao: string;
@@ -44,6 +48,9 @@ export function NovoGasto({
   const [nome, setNome] = useState("");
   const [categoria, setCategoria] = useState<string | null>(null);
   const [pessoa, setPessoa] = useState<string | null>(null);
+  // escolha feita à mão não é trocada pela sugestão
+  const [categoriaManual, setCategoriaManual] = useState(false);
+  const [pessoaManual, setPessoaManual] = useState(false);
   const [dia, setDia] = useState(ehMesAtual ? String(new Date().getDate()) : "");
   const [parcelado, setParcelado] = useState(false);
   const [atual, setAtual] = useState("1");
@@ -135,12 +142,20 @@ export function NovoGasto({
             aria-label="Descrição"
             value={nome}
             maxLength={80}
-            onChange={(e) => setNome(e.target.value)}
+            onChange={(e) => {
+              setNome(e.target.value);
+              const s = sugerirPeloNome(e.target.value, aprenderDe);
+              if (!categoriaManual) setCategoria(s.categoria);
+              if (!pessoaManual && s.pessoa && pessoas.includes(s.pessoa)) setPessoa(s.pessoa);
+            }}
           />
         </div>
 
         <fieldset className="chips-grupo">
-          <legend>Categoria</legend>
+          <legend>
+            Categoria
+            {categoria && !categoriaManual && <span className="tag-sugerida">sugerida pelo nome</span>}
+          </legend>
           <div className="chips">
             {CATEGORIAS.map((c) => (
               <button
@@ -149,7 +164,10 @@ export function NovoGasto({
                 className="chip-escolha"
                 aria-pressed={categoria === c}
                 style={{ "--cor": corDaCategoria(c) } as React.CSSProperties}
-                onClick={() => setCategoria(categoria === c ? null : c)}
+                onClick={() => {
+                  setCategoria(categoria === c ? null : c);
+                  setCategoriaManual(true);
+                }}
               >
                 <span className="chip-cat-dot" />
                 {c}
@@ -168,7 +186,10 @@ export function NovoGasto({
                   type="button"
                   className="chip-escolha chip-escolha--pessoa"
                   aria-pressed={pessoa === p}
-                  onClick={() => setPessoa(pessoa === p ? null : p)}
+                  onClick={() => {
+                    setPessoa(pessoa === p ? null : p);
+                    setPessoaManual(true);
+                  }}
                 >
                   {p}
                 </button>

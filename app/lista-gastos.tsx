@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { filtroAtivo, filtrarGastos, type FiltroGastos } from "@/lib/filtro";
-import { labelCurto } from "@/lib/meses";
-import { somarMes } from "@/lib/parcelas";
 import { CATEGORIAS, corDaCategoria } from "@/lib/categorias";
+import type { CompraConhecida } from "@/lib/sugestao";
+import { FormularioCompra } from "./form-compra";
 import { IconeLapis, IconeX } from "./icones";
 import { ChipCategoria, ChipPessoa, Vazio, fmt, numero, type Gasto } from "./ui";
 
@@ -95,7 +95,10 @@ export function ListaGastos({
   tema,
   embutido,
   pessoas,
+  aprenderDe,
 }: {
+  /** compras já lançadas para sugerir categoria, pessoa e nomes (padrão: as desta lista) */
+  aprenderDe?: CompraConhecida[];
   /** quem divide os gastos (Preferências); vazio esconde o campo "Quem gastou?" */
   pessoas: string[];
   /** dentro de outro cartão (abas): sem moldura nem cabeçalho próprios */
@@ -127,17 +130,6 @@ export function ListaGastos({
   onRemover: (gasto: Gasto) => void;
   tema?: string;
 }) {
-  const [nome, setNome] = useState("");
-  const [valor, setValor] = useState(0);
-  const [categoria, setCategoria] = useState("");
-  const [pessoa, setPessoa] = useState("");
-  const [dia, setDia] = useState("");
-  const [parcelado, setParcelado] = useState(false);
-  const [atual, setAtual] = useState("1");
-  const [total, setTotal] = useState("2");
-  // valor total da compra parcelada (opcional): se preenchido, calcula a parcela
-  const [totalCompra, setTotalCompra] = useState(0);
-  const [erro, setErro] = useState("");
   // cartão: mostrar todas as compras, só as à vista ou só as parceladas
   const [tipo, setTipo] = useState<"todas" | "vista" | "parceladas">("todas");
 
@@ -162,51 +154,6 @@ export function ListaGastos({
       : visiveis.filter((g, i) => i < LINHAS_INICIAIS || g.id === editando);
   const Raiz = embutido ? "div" : "section";
   const mm = mes.slice(5, 7);
-
-  const nAtual = Math.floor(Number(atual)) || 0;
-  const nTotal = Math.floor(Number(total)) || 0;
-  const parcelasOk = nTotal >= 2 && nTotal <= 60 && nAtual >= 1 && nAtual <= nTotal;
-
-  /** Com o valor total preenchido, a parcela é calculada (total ÷ número de parcelas). */
-  const calcularParcela = (totalDaCompra: number, parcelas: number) => {
-    if (totalDaCompra > 0 && parcelas >= 2) setValor(Math.round((totalDaCompra / parcelas) * 100) / 100);
-  };
-
-  const adicionar = async () => {
-    if (!nome.trim() || valor <= 0) return;
-
-    setErro("");
-
-    if (parcelado && onAdicionarParcelado) {
-      if (!parcelasOk) {
-        setErro("Confira as parcelas: o total deve ser de 2 a 60 e a parcela atual não pode passar do total.");
-        return;
-      }
-
-      const falha = await onAdicionarParcelado(nome.trim(), valor, nAtual, nTotal, categoria || null, pessoa || null);
-
-      if (falha) {
-        setErro(falha);
-        return;
-      }
-
-      setParcelado(false);
-      setAtual("1");
-      setTotal("2");
-      setTotalCompra(0);
-    } else {
-      onAdicionar(nome.trim(), valor, categoria || null, lerDia(dia), pessoa || null);
-    }
-
-    setNome("");
-    setValor(0);
-    setCategoria("");
-    setDia("");
-  };
-
-  const aoTeclar = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") adicionar();
-  };
 
   const iniciarEdicao = (g: Gasto) => {
     setEditando(g.id);
@@ -254,161 +201,16 @@ export function ListaGastos({
 
       {extra}
 
-      <div className="expense-form">
-        <div className="form-cabeca">
-          <span className="form-titulo">{parcelavel ? "Nova compra no cartão" : "Novo gasto"}</span>
-
-          {parcelavel && (
-            <div className="segmentos segmentos--mini" role="radiogroup" aria-label="Forma de pagamento">
-              <button type="button" role="radio" aria-checked={!parcelado} className="segmento" onClick={() => setParcelado(false)}>
-                À vista
-              </button>
-              <button type="button" role="radio" aria-checked={parcelado} className="segmento" onClick={() => setParcelado(true)}>
-                Parcelado
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="expense-add-row">
-          <div className="input-wrap">
-            <input
-              type="text"
-              placeholder={placeholder}
-              aria-label={`Nome - ${titulo}`}
-              value={nome}
-              maxLength={80}
-              onChange={(e) => setNome(e.target.value)}
-              onKeyDown={aoTeclar}
-            />
-          </div>
-
-          <div className="input-wrap short">
-            <span className="input-affix">R$</span>
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              placeholder={parcelado ? "Parcela" : "0,00"}
-              aria-label={parcelado ? `Valor da parcela - ${titulo}` : `Valor - ${titulo}`}
-              title={parcelado ? "Valor de cada parcela, como aparece na fatura" : undefined}
-              value={valor || ""}
-              onChange={(e) => {
-                setValor(numero(e.target.value));
-                setTotalCompra(0);
-              }}
-              onKeyDown={aoTeclar}
-            />
-          </div>
-
-          <SelectCategoria value={categoria} onChange={setCategoria} rotulo={`Categoria - ${titulo}`} />
-
-          {pessoas.length > 0 && (
-            <SelectPessoa value={pessoa} onChange={setPessoa} pessoas={pessoas} rotulo={`Quem gastou - ${titulo}`} />
-          )}
-
-          {!parcelado && (
-            <div className="input-wrap tiny">
-              <input
-                type="number"
-                min={1}
-                max={31}
-                inputMode="numeric"
-                placeholder="Dia"
-                aria-label={`Dia da compra - ${titulo}`}
-                title="Dia do mês da compra (opcional)"
-                value={dia}
-                onChange={(e) => setDia(e.target.value)}
-                onKeyDown={aoTeclar}
-              />
-            </div>
-          )}
-
-          <button className="btn btn-primary btn-add" onClick={adicionar}>
-            Adicionar
-          </button>
-        </div>
-
-        {parcelavel && parcelado && (
-          <div className="parcelas-box">
-            <div className="parcelas-fields">
-              <label>
-                Parcela atual
-                <div className="input-wrap">
-                  <input
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    value={atual}
-                    onChange={(e) => setAtual(e.target.value)}
-                    aria-label="Parcela deste mês"
-                  />
-                </div>
-              </label>
-
-              <span className="parcelas-de">de</span>
-
-              <label>
-                Total de parcelas
-                <div className="input-wrap">
-                  <input
-                    type="number"
-                    min={2}
-                    max={60}
-                    inputMode="numeric"
-                    value={total}
-                    onChange={(e) => {
-                      setTotal(e.target.value);
-                      calcularParcela(totalCompra, Math.floor(Number(e.target.value)) || 0);
-                    }}
-                    aria-label="Total de parcelas"
-                  />
-                </div>
-              </label>
-
-              <label className="parcelas-total">
-                Valor total (opcional)
-                <div className="input-wrap">
-                  <span className="input-affix">R$</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    inputMode="decimal"
-                    placeholder="Calcula a parcela"
-                    value={totalCompra || ""}
-                    onChange={(e) => {
-                      const v = numero(e.target.value);
-                      setTotalCompra(v);
-                      calcularParcela(v, nTotal);
-                    }}
-                    aria-label="Valor total da compra"
-                  />
-                </div>
-              </label>
-            </div>
-
-            {parcelasOk && valor > 0 ? (
-              <p className="parcelas-previa">
-                <b>
-                  {nTotal}x de {fmt(valor)}
-                </b>{" "}
-                = {fmt(valor * nTotal)} · entra agora como {nAtual}/{nTotal}
-                {nTotal > nAtual
-                  ? ` · última parcela em ${labelCurto(somarMes(mes, nTotal - nAtual))}`
-                  : " · é a última parcela"}
-              </p>
-            ) : (
-              <p className="field-hint">
-                Digite o valor de cada parcela (ou o valor total, que ele divide). Já está na 4ª de 10? Coloque 4 e 10.
-              </p>
-            )}
-          </div>
-        )}
-
-        {erro && <p className="auth-msg error">{erro}</p>}
-      </div>
+      <FormularioCompra
+        titulo={titulo}
+        placeholder={placeholder}
+        mes={mes}
+        pessoas={pessoas}
+        parcelavel={parcelavel}
+        aprenderDe={aprenderDe ?? gastos}
+        onAdicionar={onAdicionar}
+        onAdicionarParcelado={onAdicionarParcelado}
+      />
 
       {parcelavel && temParcelas && (
         <div className="segmentos segmentos--mini lista-tipos" role="radiogroup" aria-label="Mostrar compras">
