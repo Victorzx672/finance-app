@@ -32,14 +32,16 @@ model User {
   /// Manda e-mail avisando das contas que vencem hoje ou amanhã.
   lembreteEmail Boolean @default(true)
 
-  finances       FinanceData[]
-  tokens         TokenEmail[]
-  parcelamentos  Parcelamento[]
-  contasFixas    ContaFixa[]
-  rendasFixas    RendaFixa[]
-  saldosGuardado SaldoGuardado[]
-  pagamentos     Pagamento[]
-  metas          Meta[]
+  finances        FinanceData[]
+  tokens          TokenEmail[]
+  parcelamentos   Parcelamento[]
+  contasFixas     ContaFixa[]
+  rendasFixas     RendaFixa[]
+  saldosGuardado  SaldoGuardado[]
+  pagamentos      Pagamento[]
+  metas           Meta[]
+  conexoesBanco   ConexaoBanco[]
+  transacoesBanco TransacaoBanco[]
 }
 
 /// Compra parcelada. Aparece nos meses de mesInicio até mesInicio + totalParcelas - 1.
@@ -192,4 +194,41 @@ model Meta {
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// Banco conectado pelo Open Finance (via Pluggy). itemId = o "item" da Pluggy.
+model ConexaoBanco {
+  id         Int       @id @default(autoincrement())
+  itemId     String    @unique
+  nomeBanco  String
+  status     String // status do item na Pluggy (UPDATED, LOGIN_ERROR...)
+  ultimaSync DateTime?
+  criadoEm   DateTime  @default(now())
+
+  userId     Int
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transacoes TransacaoBanco[]
+
+  @@index([userId])
+}
+
+/// Compra que veio do banco. Fica "pendente" até o usuário adicionar ao mês ou ignorar
+/// (os gastos do mês só mudam pelo botão Salvar, então não gravamos direto em Expense).
+model TransacaoBanco {
+  id             Int      @id @default(autoincrement())
+  externoId      String   @unique // id da transação na Pluggy
+  descricao      String
+  valor          Float
+  data           DateTime
+  cartao         Boolean // veio da conta de cartão de crédito
+  categoriaBanco String?
+  estado         String   @default("pendente") // pendente | importada | ignorada
+  criadoEm       DateTime @default(now())
+
+  conexaoId Int? // nulo = o banco foi desconectado (a compra fica para não voltar ao reconectar)
+  conexao   ConexaoBanco? @relation(fields: [conexaoId], references: [id], onDelete: SetNull)
+  userId    Int
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, estado])
 }

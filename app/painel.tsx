@@ -85,6 +85,8 @@ import { PainelPreferencias } from "./preferencias";
 import { RendasFixas, type EdicaoRendaFixa } from "./rendas-fixas";
 import { PainelAno } from "./resumo-ano";
 import { SeletorMes } from "./seletor-mes";
+import { ComprasBanco, plural, type CompraPendente } from "./compras-banco";
+import { adivinharCategoria, categoriasAprendidas } from "@/lib/fatura";
 import { InputField, fmt, numero, type Gasto } from "./ui";
 
 const MES_ATUAL = chaveMes(new Date());
@@ -156,6 +158,9 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const [gastosVariaveis, setGastosVariaveis] = useState(0);
   const [percentualInvestimento, setPercentualInvestimento] = useState(0);
   const [gastos, setGastos] = useState<Gasto[]>([]);
+  // compras do banco já postas no mês, mas só marcadas como importadas quando o mês for salvo
+  const [doBancoNaoSalvas, setDoBancoNaoSalvas] = useState<number[]>([]);
+  const [versaoBanco, setVersaoBanco] = useState(0);
   const [parcelas, setParcelas] = useState<Gasto[]>([]);
   const [contas, setContas] = useState<ContaFixaItem[]>([]);
   const [pagos, setPagos] = useState<string[]>([]);
@@ -397,6 +402,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       setGastosVariaveis(variaveis);
       setPercentualInvestimento(percentual);
       setGastos(dados.gastos);
+      setDoBancoNaoSalvas([]);
       setInvestGuardado(dados.finance?.investimentoGuardado ?? 0);
 
       // O que veio do servidor é o ponto de partida: ainda não há nada a salvar
@@ -477,6 +483,20 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
       // Se o usuário continuou digitando durante o envio, o que sobrou ainda conta como alteração
       setSalvoJson(enviado);
+
+      if (doBancoNaoSalvas.length > 0) {
+        const marcou = await fetch("/api/banco/transacoes", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: doBancoNaoSalvas, estado: "importada" }),
+        }).then((r) => r.ok, () => false);
+
+        if (marcou) {
+          setDoBancoNaoSalvas([]);
+          setVersaoBanco((v) => v + 1);
+        }
+      }
+
       await carregarHistorico();
       mostrarAviso("ok", "Alterações salvas.", 2500);
       return true;
@@ -508,6 +528,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     setGastosVariaveis(salvo.gastosVariaveis);
     setPercentualInvestimento(salvo.percentualInvestimento);
     setGastos(salvo.gastos.map((g) => ({ ...g, id: crypto.randomUUID() })));
+    setDoBancoNaoSalvas([]);
     mostrarAviso("ok", "Alterações descartadas.", 2500);
   };
 
@@ -751,6 +772,26 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     );
 
     return null;
+  };
+
+  /** Compras do banco conectado entram no mês como alterações (falta Salvar), já com categoria sugerida. */
+  const adicionarDoBanco = (compras: CompraPendente[]) => {
+    const aprendidas = categoriasAprendidas(todosGastos);
+
+    setGastos((prev) => [
+      ...prev,
+      ...compras.map((c) => ({
+        id: crypto.randomUUID(),
+        nome: c.descricao,
+        valor: c.valor,
+        cartao: c.cartao ? CARTAO : null,
+        categoria: adivinharCategoria(c.descricao, c.categoriaBanco, aprendidas),
+        dia: Number(c.data.slice(8, 10)),
+        pessoa: null,
+      })),
+    ]);
+    setDoBancoNaoSalvas((ids) => [...ids, ...compras.map((c) => c.id)]);
+    mostrarAviso("ok", `${plural(compras.length, "compra adicionada", "compras adicionadas")}. Confira e clique em Salvar.`);
   };
 
   const editarItem = async (gasto: Gasto, novo: EdicaoGasto) => {
@@ -1317,6 +1358,14 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                 </section>
 
                 <div className="coluna-lancamentos">
+                  <ComprasBanco
+                    mes={mesSelecionado}
+                    adicionadas={doBancoNaoSalvas}
+                    versao={versaoBanco}
+                    onAdicionar={adicionarDoBanco}
+                    onAviso={mostrarAviso}
+                  />
+
                   <Lancamentos
                     abas={[
                       { id: "contas", rotulo: "Contas fixas", quantidade: contas.length, total: totalContas },
