@@ -12,14 +12,15 @@ const tokenCerto = (recebido: string | null, segredo: string) => {
 };
 
 /**
- * A Pluggy chama aqui quando o banco tem novidade. O aviso serve só de sinal: não usamos os
+ * A Pluggy chama aqui quando o banco tem novidade, mandando o segredo no cabeçalho
+ * X-Webhook-Secret (cadastrado por scripts/registrar-webhook.mjs). O aviso serve só de sinal: não usamos os
  * dados dele, apenas o itemId, e buscamos as transações na API com a nossa chave. Respondemos
  * na hora (a Pluggy espera no máximo 10 s) e sincronizamos depois, com after().
  */
 export async function POST(req: Request) {
   const segredo = process.env.PLUGGY_WEBHOOK_SECRET;
 
-  if (!segredo || !tokenCerto(new URL(req.url).searchParams.get("token"), segredo)) {
+  if (!segredo || !tokenCerto(req.headers.get("x-webhook-secret"), segredo)) {
     return Response.json({ error: "Não autorizado" }, { status: 401 });
   }
 

@@ -58,10 +58,10 @@ async function pluggy<T>(caminho: string, init: RequestInit = {}): Promise<T> {
 }
 
 /** Token de uso único que o widget (Pluggy Connect) usa no navegador. */
-export async function criarConnectToken(clientUserId: string, webhookUrl?: string) {
+export async function criarConnectToken(clientUserId: string) {
   const r = await pluggy<{ accessToken: string }>("/connect_token", {
     method: "POST",
-    body: JSON.stringify({ options: { clientUserId, ...(webhookUrl && { webhookUrl }) } }),
+    body: JSON.stringify({ options: { clientUserId } }),
   });
 
   return r.accessToken;
