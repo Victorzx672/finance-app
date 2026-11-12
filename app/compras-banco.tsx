@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { labelMes } from "@/lib/meses";
 import { IconeCheck, IconeX } from "./icones";
 import { fmt } from "./ui";
@@ -240,15 +241,19 @@ export function ComprasBanco({
         <p className="field-hint">{plural(outrosMeses, "compra esperando", "compras esperando")} em outros meses.</p>
       )}
 
-      {token && (
-        <PluggyConnect
-          connectToken={token}
-          includeSandbox={process.env.NODE_ENV !== "production"}
-          onSuccess={({ item }) => conectou(item.id)}
-          onError={({ message }) => onAviso("error", message)}
-          onClose={() => setToken(null)}
-        />
-      )}
+      {/* vai direto no body: a animação do layout do mês deixa um transform, e com ele a janela
+          "fixa" da Pluggy ficava presa dentro da seção, fora da tela */}
+      {token &&
+        createPortal(
+          <PluggyConnect
+            connectToken={token}
+            includeSandbox={process.env.NODE_ENV !== "production"}
+            onSuccess={({ item }) => conectou(item.id)}
+            onError={({ message }) => onAviso("error", message)}
+            onClose={() => setToken(null)}
+          />,
+          document.body
+        )}
     </section>
   );
 }
