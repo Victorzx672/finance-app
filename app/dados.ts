@@ -14,6 +14,8 @@ export interface HistoricoMes {
   renda: number;
   saldo: number;
   totalGastos: number;
+  /** o mês foi concluído (fica travado até ser reaberto) */
+  concluido: boolean;
 }
 
 export interface FinancaDoMes {
@@ -25,6 +27,8 @@ export interface FinancaDoMes {
     meta: number;
     /** quanto do "para investir" do mês já foi somado ao total guardado */
     investimentoGuardado: number;
+    /** data em que o mês foi concluído (null = aberto) */
+    concluidoEm: string | null;
   } | null;
   gastos: Gasto[];
   rendas: FonteRenda[];

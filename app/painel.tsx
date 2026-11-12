@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   LIMITE_GASTOS_PERCENT,
@@ -10,6 +10,13 @@ import {
   somar,
 } from "@/lib/calculos";
 import { serieGuardado, type SaldoMes } from "@/lib/evolucao-guardado";
+import {
+  mesAnteriorAberto,
+  mesEmAndamento,
+  pendenciasDoFechamento,
+  quantasPendencias,
+  situacaoDoMes,
+} from "@/lib/fechamento";
 import { FILTRO_VAZIO, type FiltroGastos } from "@/lib/filtro";
 import { gastosPorPessoa } from "@/lib/pessoas";
 import { anoDe, chaveMes, faixaDeAnos, labelCurto, labelMes } from "@/lib/meses";
@@ -57,6 +64,7 @@ import {
 import { FontesRenda, novaFonte, type FonteRenda } from "./fontes-renda";
 import { PainelCategorias, PainelEvolucao, PainelEvolucaoGuardado, PainelPessoas, PainelProjecao } from "./graficos";
 import { PainelDicas } from "./dicas";
+import { AvisoMesAberto, JanelaFechamento, StatusMes, nomeDoMes } from "./fechar-mes";
 import { AcaoGuardar, CartaoGuardado } from "./guardado";
 import {
   IconeAlerta,
@@ -166,6 +174,8 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const [salvoJson, setSalvoJson] = useState<string | null>(null);
   // Ação adiada porque há alterações não salvas (sair, trocar de mês...)
   const [pendente, setPendente] = useState<{ rotulo: string; acao: () => void } | null>(null);
+  // Data em que o mês aberto na tela foi concluído (null = aberto). Concluído fica travado até reabrir.
+  const [concluidoEm, setConcluidoEm] = useState<string | null>(null);
 
   // Dados gerais
   const [historico, setHistorico] = useState<HistoricoMes[]>([]);
@@ -185,6 +195,8 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const [comparativo, setComparativo] = useState<{ mes: string; dados: GastosDoMes | null } | null>(null);
   const [novoGasto, setNovoGasto] = useState(false);
   const [atalhos, setAtalhos] = useState(false);
+  const [fechamentoDe, setFechamentoDe] = useState<string | null>(null); // mês com a janela de fechamento aberta
+  const navegou = useRef(false); // o usuário já trocou de mês: o app não pula mais sozinho
   const [ocultar, setOcultar] = useState(() => lerArmazenado("fluxopay-ocultar") === "1");
   const [escuro, setEscuro] = useState(
     () => typeof document !== "undefined" && document.documentElement.dataset.tema === "escuro"
@@ -263,6 +275,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const mesesComDados = new Set(historico.map((h) => h.mesReferencia));
   const faixaAnos = faixaDeAnos(ANO_ATUAL, mesesComDados);
 
+  // Fechamento: meses concluídos e o mês em andamento (o de hoje, ou o seguinte se ele já foi concluído)
+  const mesesConcluidos = new Set(historico.filter((h) => h.concluido).map((h) => h.mesReferencia));
+  const mesAndamento = mesEmAndamento(MES_ATUAL, mesesConcluidos);
+
   // Só salva depois que os dados do mês selecionado foram lidos do servidor
   const carregado = mesCarregado === mesSelecionado;
 
@@ -276,6 +292,27 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     gastos,
   });
   const alterado = carregado && salvoJson !== null && payloadJson !== salvoJson;
+
+  // Mês concluído: os campos ficam travados até reabrir
+  const travado = carregado && concluidoEm !== null;
+  const situacao = situacaoDoMes({
+    mes: mesSelecionado,
+    hoje: MES_ATUAL,
+    diaHoje: new Date().getDate(),
+    emAndamento: mesAndamento,
+    concluido: carregado ? travado : mesesConcluidos.has(mesSelecionado),
+  });
+  const anteriorAberto =
+    mesSelecionado === mesAndamento ? mesAnteriorAberto(mesAndamento, mesesComDados, mesesConcluidos) : null;
+  const pendencias = pendenciasDoFechamento({
+    alterado,
+    renda,
+    contasPendentes,
+    fatura: totalNubank,
+    faturaPaga,
+    investimento,
+    investimentoGuardado: investGuardado,
+  });
 
   // Mês sem nada preenchido: oferece copiar do mês anterior
   const mesVazio =
@@ -340,6 +377,11 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       ([h, m, g, p]) => {
         if (cancelado) return;
         setHistorico(h);
+
+        // O mês de hoje já foi concluído: abre direto no seguinte (se o usuário ainda não trocou de mês)
+        const inicio = mesEmAndamento(MES_ATUAL, new Set(h.filter((x) => x.concluido).map((x) => x.mesReferencia)));
+        if (inicio !== MES_ATUAL && !navegou.current) setMesSelecionado(inicio);
+
         setMetas(m);
         setGuardadoGeral(g.geral);
         setSaldos(g.saldos);
@@ -398,6 +440,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       setPercentualInvestimento(percentual);
       setGastos(dados.gastos);
       setInvestGuardado(dados.finance?.investimentoGuardado ?? 0);
+      setConcluidoEm(dados.finance?.concluidoEm ?? null);
 
       // O que veio do servidor é o ponto de partida: ainda não há nada a salvar
       setSalvoJson(
@@ -471,7 +514,9 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       });
 
       if (!res.ok) {
-        mostrarAviso("error", "Não foi possível salvar. Suas alterações continuam aqui; tente de novo.");
+        // 409: o mês foi concluído (em outra aba, por exemplo) e não aceita mais alterações
+        const motivo = res.status === 409 ? ((await res.json().catch(() => ({}))).error as string | undefined) : null;
+        mostrarAviso("error", motivo ?? "Não foi possível salvar. Suas alterações continuam aqui; tente de novo.");
         return false;
       }
 
@@ -531,7 +576,12 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   };
 
   const mudarMes = (novo: string) => {
-    if (novo !== mesSelecionado) protegerSaida("trocar de mês", () => setMesSelecionado(novo));
+    if (novo === mesSelecionado) return;
+
+    protegerSaida("trocar de mês", () => {
+      navegou.current = true;
+      setMesSelecionado(novo);
+    });
   };
 
   const pedirSaida = () => protegerSaida("sair", onSair);
@@ -579,6 +629,11 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   };
 
   const abrirNovoGasto = () => {
+    if (travado) {
+      mostrarAviso("error", `${labelMes(mesSelecionado)} está concluído. Reabra o mês para lançar gastos.`);
+      return;
+    }
+
     if (carregado) setNovoGasto(true);
   };
 
@@ -973,6 +1028,69 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     }
   };
 
+  // Fechamento do mês
+  const pagarContasPendentes = () => Promise.all(contasPendentes.map((c) => pagar(`conta:${c.id}`, true)));
+
+  /** Salva (se preciso), conclui o mês e vai para o seguinte. Devolve a mensagem de erro, ou null. */
+  const concluirMes = async () => {
+    const mes = mesSelecionado;
+    if (alterado && !(await salvar())) return "Não foi possível salvar as alterações. Tente de novo.";
+
+    try {
+      const res = await fetch("/api/finance/concluir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mes }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) return (data.error as string | undefined) ?? "Não foi possível concluir o mês.";
+
+      setFechamentoDe(null);
+      navegou.current = true;
+      setMesSelecionado(data.proximo);
+      await carregarHistorico();
+      mostrarAviso(
+        "ok",
+        data.preparado
+          ? `${labelMes(mes)} concluído. ${labelMes(data.proximo)} já começou com a renda e as estimativas de ${nomeDoMes(mes)}.`
+          : `${labelMes(mes)} concluído. Agora é ${nomeDoMes(data.proximo)}.`
+      );
+      return null;
+    } catch {
+      return "Não foi possível conectar ao servidor.";
+    }
+  };
+
+  const reabrirMes = async () => {
+    const mes = mesSelecionado;
+    const ok = await confirmar({
+      titulo: `Reabrir ${labelMes(mes)}?`,
+      texto: "O mês volta a aceitar alterações. O mês seguinte continua como está.",
+      botao: "Reabrir",
+    });
+    if (!ok) return;
+
+    const falha = await chamar(`/api/finance/concluir?mes=${mes}`, "DELETE");
+
+    if (falha) {
+      mostrarAviso("error", falha);
+      return;
+    }
+
+    setConcluidoEm(null);
+    await carregarHistorico();
+    mostrarAviso("ok", `${labelMes(mes)} reaberto para edição.`, 3000);
+  };
+
+  /** "Revisar e concluir" o mês anterior que ficou aberto: vai até ele e abre o fechamento. */
+  const revisarMesAnterior = (mes: string) =>
+    protegerSaida(`ir para ${nomeDoMes(mes)}`, () => {
+      navegou.current = true;
+      setMesSelecionado(mes);
+      setFechamentoDe(mes);
+    });
+
   // ──────────────────────────────────────────────────────────────────────────
 
   const nome = nomeUsuario ?? "você";
@@ -1081,16 +1199,28 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
               <div className="mes-barra">
                 <SeletorMes
                   mes={mesSelecionado}
-                  mesAtual={MES_ATUAL}
+                  mesAtual={mesAndamento}
+                  rotuloAtual={mesAndamento === MES_ATUAL ? "Voltar para hoje" : `Ir para ${nomeDoMes(mesAndamento)}`}
                   mesesComDados={mesesComDados}
+                  mesesConcluidos={mesesConcluidos}
                   anoMin={faixaAnos.min}
                   anoMax={faixaAnos.max}
                   onChange={mudarMes}
                 />
-                <p className="mes-barra-dica">
-                  O resumo se atualiza enquanto você digita. Quando terminar, clique em <strong>Salvar</strong>.
-                </p>
+
+                <StatusMes
+                  situacao={situacao}
+                  concluidoEm={carregado ? concluidoEm : null}
+                  pendencias={quantasPendencias(pendencias)}
+                  podeAgir={carregado}
+                  onConcluir={() => setFechamentoDe(mesSelecionado)}
+                  onReabrir={reabrirMes}
+                />
               </div>
+
+              {anteriorAberto && (
+                <AvisoMesAberto mes={anteriorAberto} onRevisar={() => revisarMesAnterior(anteriorAberto)} />
+              )}
 
               <div className="hero-grid">
                 {cartaoGuardado}
@@ -1116,7 +1246,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
               <AvisoVencimentos itens={vencimentos} />
 
-              {sugestao && (
+              {sugestao && !travado && (
                 <section className="card copy-banner">
                   <p>
                     <strong>Este mês está vazio.</strong> Quer começar com os valores de{" "}
@@ -1224,96 +1354,100 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                 <section className="card coluna-numeros">
                   <div className="panel-head">
                     <h2 className="panel-title">Seus números do mês</h2>
-                    <p className="panel-sub">Digite os valores em reais.</p>
+                    <p className="panel-sub">
+                      {travado ? "Mês concluído: reabra o mês para editar." : "Digite os valores em reais."}
+                    </p>
                   </div>
 
-                  <div className="panel-body">
-                    <div className="input-section input-section--entrada">
-                      <span className="input-section-label">Entrada</span>
+                  <fieldset className="campos-mes" disabled={travado}>
+                    <div className="panel-body">
+                      <div className="input-section input-section--entrada">
+                        <span className="input-section-label">Entrada</span>
 
-                      <RendasFixas
-                        rendas={rendasFixas}
-                        onAdicionar={adicionarRendaFixa}
-                        onEditar={editarRendaFixa}
-                        onRemover={removerRendaFixa}
-                      />
-
-                      <FontesRenda fontes={rendas} total={renda} onChange={setRendas} onTornarFixa={tornarRendaFixa} />
-                    </div>
-
-                    <div className="input-section input-section--saidas">
-                      <span className="input-section-label">Saídas</span>
-
-                      <InputField
-                        label="Outros gastos fixos"
-                        hint="Fixos que não estão nas contas fixas (veja a aba Contas fixas ao lado)."
-                        type="number"
-                        prefix="R$"
-                        placeholder="0,00"
-                        value={gastosFixos}
-                        onChange={(v) => setGastosFixos(numero(v))}
-                      />
-
-                      <InputField
-                        label="Gastos variáveis"
-                        hint="Mercado, lazer, transporte, compras."
-                        type="number"
-                        prefix="R$"
-                        placeholder="0,00"
-                        value={gastosVariaveis}
-                        onChange={(v) => setGastosVariaveis(numero(v))}
-                      />
-
-                      {totalContas > 0 && (
-                        <p className="field-hint">
-                          + {fmt(totalContas)} de contas fixas = {fmt(gastosFixos + totalContas)} em gastos fixos.
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="input-section input-section--objetivos">
-                      <span className="input-section-label">Objetivos</span>
-
-                      <div className="field">
-                        <div className="slider-cabeca">
-                          <label htmlFor="percentual-investir">Quanto do que sobra investir</label>
-                          <span className="slider-valor">{percentualInvestimento}%</span>
-                        </div>
-
-                        <input
-                          id="percentual-investir"
-                          type="range"
-                          className="slider"
-                          min={0}
-                          max={100}
-                          step={1}
-                          value={percentualInvestimento}
-                          style={{ "--p": `${percentualInvestimento}%` } as React.CSSProperties}
-                          onChange={(e) => setPercentualInvestimento(Math.min(100, numero(e.target.value)))}
+                        <RendasFixas
+                          rendas={rendasFixas}
+                          onAdicionar={adicionarRendaFixa}
+                          onEditar={editarRendaFixa}
+                          onRemover={removerRendaFixa}
                         />
 
-                        <div className="chips chips--pequenos" role="group" aria-label="Porcentagens rápidas">
-                          {PERCENTUAIS_RAPIDOS.map((p) => (
-                            <button
-                              key={p}
-                              type="button"
-                              className="chip-escolha"
-                              aria-pressed={percentualInvestimento === p}
-                              onClick={() => setPercentualInvestimento(p)}
-                            >
-                              {p}%
-                            </button>
-                          ))}
-                        </div>
+                        <FontesRenda fontes={rendas} total={renda} onChange={setRendas} onTornarFixa={tornarRendaFixa} />
+                      </div>
 
-                        <span className="field-hint">
-                          {investimento > 0
-                            ? `= ${fmt(investimento)} por mês para investir. As metas ficam na aba Metas.`
-                            : "Separa essa parte da sobra do mês. As metas ficam na aba Metas."}
-                        </span>
+                      <div className="input-section input-section--saidas">
+                        <span className="input-section-label">Saídas</span>
+
+                        <InputField
+                          label="Outros gastos fixos"
+                          hint="Fixos que não estão nas contas fixas (veja a aba Contas fixas ao lado)."
+                          type="number"
+                          prefix="R$"
+                          placeholder="0,00"
+                          value={gastosFixos}
+                          onChange={(v) => setGastosFixos(numero(v))}
+                        />
+
+                        <InputField
+                          label="Gastos variáveis"
+                          hint="Mercado, lazer, transporte, compras."
+                          type="number"
+                          prefix="R$"
+                          placeholder="0,00"
+                          value={gastosVariaveis}
+                          onChange={(v) => setGastosVariaveis(numero(v))}
+                        />
+
+                        {totalContas > 0 && (
+                          <p className="field-hint">
+                            + {fmt(totalContas)} de contas fixas = {fmt(gastosFixos + totalContas)} em gastos fixos.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="input-section input-section--objetivos">
+                        <span className="input-section-label">Objetivos</span>
+
+                        <div className="field">
+                          <div className="slider-cabeca">
+                            <label htmlFor="percentual-investir">Quanto do que sobra investir</label>
+                            <span className="slider-valor">{percentualInvestimento}%</span>
+                          </div>
+
+                          <input
+                            id="percentual-investir"
+                            type="range"
+                            className="slider"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={percentualInvestimento}
+                            style={{ "--p": `${percentualInvestimento}%` } as React.CSSProperties}
+                            onChange={(e) => setPercentualInvestimento(Math.min(100, numero(e.target.value)))}
+                          />
+
+                          <div className="chips chips--pequenos" role="group" aria-label="Porcentagens rápidas">
+                            {PERCENTUAIS_RAPIDOS.map((p) => (
+                              <button
+                                key={p}
+                                type="button"
+                                className="chip-escolha"
+                                aria-pressed={percentualInvestimento === p}
+                                onClick={() => setPercentualInvestimento(p)}
+                              >
+                                {p}%
+                              </button>
+                            ))}
+                          </div>
+
+                          <span className="field-hint">
+                            {investimento > 0
+                              ? `= ${fmt(investimento)} por mês para investir. As metas ficam na aba Metas.`
+                              : "Separa essa parte da sobra do mês. As metas ficam na aba Metas."}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </fieldset>
                 </section>
 
                 <div className="coluna-lancamentos">
@@ -1327,78 +1461,84 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                     onFiltro={setFiltro}
                     conteudo={{
                       contas: (
-                        <PainelContasFixas
-                          embutido
-                          mes={mesSelecionado}
-                          contas={contas}
-                          pagos={pagos}
-                          ehMesAtual={ehMesAtual}
-                          onAdicionar={adicionarConta}
-                          onEditar={editarConta}
-                          onRemover={removerConta}
-                          onPagar={pagar}
-                        />
+                        <fieldset className="campos-mes" disabled={travado}>
+                          <PainelContasFixas
+                            embutido
+                            mes={mesSelecionado}
+                            contas={contas}
+                            pagos={pagos}
+                            ehMesAtual={ehMesAtual}
+                            onAdicionar={adicionarConta}
+                            onEditar={editarConta}
+                            onRemover={removerConta}
+                            onPagar={pagar}
+                          />
+                        </fieldset>
                       ),
                       cartao: (
-                        <ListaGastos
-                          embutido
-                          titulo={`Cartão ${CARTAO}`}
-                          descricao="Compras à vista e parceladas deste mês."
-                          placeholder="Compra no cartão"
-                          vazio="Nenhuma compra no cartão neste mês."
-                          parcelavel
-                          pessoas={prefs.pessoas}
-                          aprenderDe={todosGastos}
-                          mes={mesSelecionado}
-                          filtro={filtro}
-                          gastos={gastosNubank}
-                          extra={
-                            <>
-                              <CartaoInfo
-                                nome={CARTAO}
-                                mes={mesSelecionado}
-                                config={configCartao}
-                                compras={gastosNubank}
-                                ehMesAtual={ehMesAtual}
-                                paga={faturaPaga}
-                                categoriaFiltrada={filtro.categoria}
-                                onPagar={(pago) => pagar(`fatura:${CARTAO}`, pago)}
-                                onFiltrarCategoria={(c) =>
-                                  setFiltro((f) => ({ ...f, categoria: f.categoria === c ? "" : c }))
-                                }
-                                onConfigurar={() => irParaAba("prefs")}
-                              />
+                        <fieldset className="campos-mes" disabled={travado}>
+                          <ListaGastos
+                            embutido
+                            titulo={`Cartão ${CARTAO}`}
+                            descricao="Compras à vista e parceladas deste mês."
+                            placeholder="Compra no cartão"
+                            vazio="Nenhuma compra no cartão neste mês."
+                            parcelavel
+                            pessoas={prefs.pessoas}
+                            aprenderDe={todosGastos}
+                            mes={mesSelecionado}
+                            filtro={filtro}
+                            gastos={gastosNubank}
+                            extra={
+                              <>
+                                <CartaoInfo
+                                  nome={CARTAO}
+                                  mes={mesSelecionado}
+                                  config={configCartao}
+                                  compras={gastosNubank}
+                                  ehMesAtual={ehMesAtual}
+                                  paga={faturaPaga}
+                                  categoriaFiltrada={filtro.categoria}
+                                  onPagar={(pago) => pagar(`fatura:${CARTAO}`, pago)}
+                                  onFiltrarCategoria={(c) =>
+                                    setFiltro((f) => ({ ...f, categoria: f.categoria === c ? "" : c }))
+                                  }
+                                  onConfigurar={() => irParaAba("prefs")}
+                                />
 
-                              <ImportarFatura
-                                mes={mesSelecionado}
-                                existentes={gastosNubank}
-                                pessoas={prefs.pessoas}
-                                onImportar={importarFatura}
-                              />
-                            </>
-                          }
-                          onAdicionar={adicionarGasto(CARTAO)}
-                          onAdicionarParcelado={adicionarParcelado(CARTAO)}
-                          onEditar={editarItem}
-                          onRemover={removerItem}
-                        />
+                                <ImportarFatura
+                                  mes={mesSelecionado}
+                                  existentes={gastosNubank}
+                                  pessoas={prefs.pessoas}
+                                  onImportar={importarFatura}
+                                />
+                              </>
+                            }
+                            onAdicionar={adicionarGasto(CARTAO)}
+                            onAdicionarParcelado={adicionarParcelado(CARTAO)}
+                            onEditar={editarItem}
+                            onRemover={removerItem}
+                          />
+                        </fieldset>
                       ),
                       outros: (
-                        <ListaGastos
-                          embutido
-                          titulo="Outros gastos"
-                          descricao="Compras avulsas do mês, no dinheiro, Pix ou débito."
-                          placeholder="O que você comprou?"
-                          vazio="Nenhum gasto anotado neste mês."
-                          pessoas={prefs.pessoas}
-                          aprenderDe={todosGastos}
-                          mes={mesSelecionado}
-                          filtro={filtro}
-                          gastos={gastosAvulsos}
-                          onAdicionar={adicionarGasto(null)}
-                          onEditar={editarItem}
-                          onRemover={removerItem}
-                        />
+                        <fieldset className="campos-mes" disabled={travado}>
+                          <ListaGastos
+                            embutido
+                            titulo="Outros gastos"
+                            descricao="Compras avulsas do mês, no dinheiro, Pix ou débito."
+                            placeholder="O que você comprou?"
+                            vazio="Nenhum gasto anotado neste mês."
+                            pessoas={prefs.pessoas}
+                            aprenderDe={todosGastos}
+                            mes={mesSelecionado}
+                            filtro={filtro}
+                            gastos={gastosAvulsos}
+                            onAdicionar={adicionarGasto(null)}
+                            onEditar={editarItem}
+                            onRemover={removerItem}
+                          />
+                        </fieldset>
                       ),
                     }}
                   />
@@ -1449,7 +1589,14 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                           onClick={() => mudarMes(item.mesReferencia)}
                         >
                           <span className="history-topo">
-                            <span className="history-month">{labelCurto(item.mesReferencia)}</span>
+                            <span className="history-month">
+                              {labelCurto(item.mesReferencia)}
+                              {item.concluido && (
+                                <span className="history-concluido" title="Mês concluído" aria-label="concluído">
+                                  <IconeCheck size={11} />
+                                </span>
+                              )}
+                            </span>
                             {passou && <span className="history-flag">acima de {LIMITE_GASTOS_PERCENT}%</span>}
                           </span>
 
@@ -1537,6 +1684,27 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
             </button>
           </div>
         </Modal>
+      )}
+
+      {fechamentoDe === mesSelecionado && carregado && !travado && (
+        <JanelaFechamento
+          mes={mesSelecionado}
+          resultado={{ renda, totalGastos, saldo, percentGastos, statusLimite }}
+          gastosMesAnterior={dadosComparativo ? dadosComparativo.total : null}
+          pendencias={pendencias}
+          investimento={investimento}
+          investimentoGuardado={investGuardado}
+          quantidadeContas={contas.length}
+          cartao={{ nome: CARTAO, total: totalNubank }}
+          atual={{ renda: somar(rendas), gastosFixos, gastosVariaveis, percentualInvestimento, rendas }}
+          podeGuardar={!alterado && mesesComDados.has(mesSelecionado)}
+          onSalvar={salvar}
+          onPagarContas={pagarContasPendentes}
+          onPagarFatura={() => pagar(`fatura:${CARTAO}`, true)}
+          onGuardar={guardarInvestimento}
+          onConcluir={concluirMes}
+          onFechar={() => setFechamentoDe(null)}
+        />
       )}
 
       {novoGasto && (

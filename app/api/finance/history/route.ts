@@ -28,6 +28,7 @@ export async function GET() {
       renda,
       saldo,
       totalGastos,
+      concluido: mes.concluidoEm !== null,
     };
   });
 

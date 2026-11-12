@@ -836,8 +836,6 @@ button { -webkit-user-select: none; user-select: none; }
 /* ══ Barra do mês e seletor ════════════════════════════════ */
 
 .mes-barra { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 20px; position: relative; z-index: 20; }
-.mes-barra-dica { font-size: 13px; color: var(--muted); }
-.mes-barra-dica strong { color: var(--text-2); }
 
 .seletor-mes { position: relative; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -1945,6 +1943,7 @@ button { -webkit-user-select: none; user-select: none; }
 .oculto .cat-aviso,
 .oculto .rosca-valor,
 .oculto .history-saldo,
+.oculto .fech-valor,
 .oculto .history-sub,
 .oculto .fonte-total strong,
 .oculto .cartao-visual-valor,
@@ -2150,7 +2149,7 @@ button { -webkit-user-select: none; user-select: none; }
   .save-status { width: 32px; padding: 0; justify-content: center; }
   .topbar-acoes .btn-topo { width: 36px; height: 36px; }
 
-  .mes-barra-dica { display: none; }
+  .status-mes { flex: 1 1 100%; justify-content: space-between; }
   .seletor-mes, .seletor-controle { flex: 1 1 auto; }
   .seletor-botao { min-width: 0; flex: 1; }
   .seletor-popover { width: min(320px, calc(100vw - 32px)); }
@@ -2254,4 +2253,87 @@ button { -webkit-user-select: none; user-select: none; }
 
 @media (max-width: 340px) {
   .cards-grid, .history-list { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ══ Fechamento do mês ═════════════════════════════════════ */
+
+/* Situação do mês ao lado do seletor */
+.status-mes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.status-mes-chip { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font-size: 13px; font-weight: 700; white-space: nowrap; box-shadow: var(--shadow-sm); }
+.status-mes-ponto { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.status-mes-chip--alerta { background: var(--amber-soft); border-color: var(--amber-border); color: var(--amber-text); }
+.status-mes-chip--alerta .status-mes-ponto { background: var(--amber); box-shadow: none; }
+.status-mes-chip--ok { background: var(--green-soft); border-color: transparent; color: var(--green); box-shadow: none; }
+.status-mes-concluir { gap: 7px; }
+.status-mes-badge { display: inline-grid; place-items: center; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 99px; background: rgba(255, 255, 255, 0.92); color: var(--blue-hover); font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* Mês concluído: os campos travam (fieldset desabilitado) e o formulário de nova compra some */
+.campos-mes { min-width: 0; margin: 0; padding: 0; border: 0; }
+.campos-mes:disabled .form-compra { display: none; }
+.campos-mes:disabled input, .campos-mes:disabled select { cursor: not-allowed; }
+
+/* Visto dos meses concluídos: no seletor e no histórico */
+.mes-check { position: absolute; bottom: 3px; left: 50%; display: inline-grid; place-items: center; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; background: var(--green); color: #fff; }
+.mes-chip--ativo .mes-check { background: #fff; color: var(--green); }
+.mes-check--legenda { position: static; margin: 0; }
+.seletor-legenda { flex-wrap: wrap; gap: 6px 14px; }
+.seletor-legenda > span { display: inline-flex; align-items: center; gap: 6px; }
+.history-month { display: inline-flex; align-items: center; gap: 5px; }
+.history-concluido { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--green-soft); color: var(--green); }
+
+/* Janela de fechamento */
+.fech-resultado { padding: 16px 18px; border-radius: 16px; background: var(--surface2); }
+.fech-resultado-rotulo { font-size: 13px; font-weight: 600; color: var(--muted); }
+.fech-resultado-valor { display: block; margin: 2px 0 14px; font-family: var(--font-titulo); font-size: 34px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fech-resultado--ok .fech-resultado-valor { color: var(--green); }
+.fech-resultado--neg .fech-resultado-valor { color: var(--red); }
+
+.fech-barra { position: relative; height: 8px; border-radius: 99px; background: var(--surface3); }
+.fech-barra-uso { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--green); }
+.fech-barra--atencao .fech-barra-uso { background: var(--amber); }
+.fech-barra--excedido .fech-barra-uso { background: var(--red); }
+.fech-barra-limite { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; border-radius: 2px; background: var(--text-2); }
+
+.fech-numeros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.fech-numeros dt { font-size: 12px; color: var(--muted); }
+.fech-numeros dd { font-weight: 800; font-variant-numeric: tabular-nums; }
+.fech-comparacao { margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+.fech-secao { margin-top: 18px; }
+.fech-secao h3 { margin-bottom: 8px; font-size: 14.5px; font-weight: 800; }
+
+.fech-lista { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.fech-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 12px; }
+.fech-item + .fech-item { border-top: 1px solid var(--border); }
+.fech-item-icone { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; }
+.fech-item--ok .fech-item-icone { background: var(--green-soft); color: var(--green); }
+.fech-item--pendente .fech-item-icone { background: var(--amber-soft); color: var(--amber); }
+.fech-item-textos { display: flex; flex-direction: column; min-width: 0; }
+.fech-item-titulo { font-size: 14px; font-weight: 700; }
+.fech-item-detalhe { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+.fech-proximo { padding: 14px 16px; border-radius: 14px; border: 1px dashed var(--blue-border); background: var(--blue-soft); }
+.fech-proximo h3 { color: var(--blue-hover); }
+.fech-proximo-lista { display: flex; flex-direction: column; gap: 6px; }
+.fech-proximo-lista li { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--text-2); }
+.fech-proximo-lista b { color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fech-proximo-nota { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.fech-proximo-nota:first-of-type { margin-top: 0; }
+.fech-proximo-carregando { height: 64px; border-radius: 10px; }
+.fech-acoes { margin-top: 18px; }
+
+@media (max-width: 400px) {
+  /* chip e botão lado a lado no celular estreito: o botão vira só "Concluir" */
+  .status-mes { gap: 8px; }
+  .status-mes-palavra { display: none; }
+  .status-mes-chip { padding: 0 11px; }
+}
+
+@media (max-width: 420px) {
+  .fech-item { grid-template-columns: 24px minmax(0, 1fr); }
+  .fech-item > .btn { grid-column: 2; justify-self: start; }
+  .fech-resultado-valor { font-size: 30px; }
+  .fech-numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* na gaveta estreita fica só o botão principal (fecha pelo X ou tocando fora) */
+  .fech-acoes .btn-outline { display: none; }
 }

@@ -72,19 +72,21 @@ model TokenEmail {
 }
 
 model FinanceData {
-  id                     Int      @id @default(autoincrement())
+  id                     Int       @id @default(autoincrement())
   mesReferencia          String
-  renda                  Float    @default(0)
-  gastosFixos            Float    @default(0)
-  gastosVariaveis        Float    @default(0)
-  percentualInvestimento Float    @default(0)
-  meta                   Float    @default(0)
-  criadoEm               DateTime @default(now())
-  atualizadoEm           DateTime @updatedAt
+  renda                  Float     @default(0)
+  gastosFixos            Float     @default(0)
+  gastosVariaveis        Float     @default(0)
+  percentualInvestimento Float     @default(0)
+  meta                   Float     @default(0)
+  criadoEm               DateTime  @default(now())
+  atualizadoEm           DateTime  @updatedAt
   /// Já enviamos o alerta de "passou do limite" neste mês?
-  alertaEnviado          Boolean  @default(false)
+  alertaEnviado          Boolean   @default(false)
   /// Quanto do "para investir" deste mês já foi somado ao total guardado.
-  investimentoGuardado   Float    @default(0)
+  investimentoGuardado   Float     @default(0)
+  /// Quando o mês foi concluído (nulo = aberto). Concluído não aceita alterações até ser reaberto.
+  concluidoEm            DateTime?
 
   userId Int
   user   User @relation(fields: [userId], references: [id])

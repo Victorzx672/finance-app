@@ -99,6 +99,13 @@ export async function POST(req: Request) {
     return erro("Gastos inválidos");
   }
 
+  const existente = await prisma.financeData.findUnique({
+    where: { userId_mesReferencia: { userId, mesReferencia: mes } },
+    select: { concluidoEm: true },
+  });
+
+  if (existente?.concluidoEm) return erro("Este mês está concluído. Reabra o mês para editar.", 409);
+
   const fontes = (rendas as RendaEntrada[]).map((r) => ({
     nome: r.nome.trim(),
     valor: arredondar(r.valor),

@@ -3,26 +3,31 @@
 import { useEffect, useRef, useState } from "react";
 import { MESES_CURTOS, anoDe, labelMes, montarMes } from "@/lib/meses";
 import { somarMes } from "@/lib/parcelas";
-import { IconeCalendario, IconeSetaBaixo, IconeSetaDir, IconeSetaEsq } from "./icones";
+import { IconeCalendario, IconeCheck, IconeSetaBaixo, IconeSetaDir, IconeSetaEsq } from "./icones";
 
 /**
  * Escolha do mês: setas para o mês anterior/próximo e um calendário que abre por cima,
- * com o ano (setas) e os 12 meses. O mês escolhido fica destacado, o mês de hoje ganha
- * um contorno e os meses que já têm dados salvos mostram um pontinho.
+ * com o ano (setas) e os 12 meses. O mês escolhido fica destacado, o mês em andamento ganha
+ * um contorno, os meses com dados salvos mostram um pontinho e os concluídos, um visto.
  */
 export function SeletorMes({
   mes,
   mesAtual,
+  rotuloAtual = "Voltar para hoje",
   mesesComDados,
+  mesesConcluidos,
   anoMin,
   anoMax,
   onChange,
 }: {
   /** "AAAA-MM" selecionado */
   mes: string;
-  /** "AAAA-MM" de hoje */
+  /** "AAAA-MM" do mês em andamento (o de hoje, ou o seguinte se ele já foi concluído) */
   mesAtual: string;
+  /** texto do botão que volta para o mês em andamento */
+  rotuloAtual?: string;
   mesesComDados: Set<string>;
+  mesesConcluidos: Set<string>;
   anoMin: number;
   anoMax: number;
   onChange: (mes: string) => void;
@@ -92,7 +97,7 @@ export function SeletorMes({
 
       {mes !== mesAtual && (
         <button className="btn btn-ghost btn-sm seletor-hoje" onClick={() => onChange(mesAtual)}>
-          Voltar para hoje
+          {rotuloAtual}
         </button>
       )}
 
@@ -133,14 +138,28 @@ export function SeletorMes({
                   onClick={() => escolher(chave)}
                 >
                   {nome}
-                  {mesesComDados.has(chave) && <span className="mes-ponto" aria-label="tem dados salvos" />}
+                  {mesesConcluidos.has(chave) ? (
+                    <span className="mes-check" aria-label="concluído">
+                      <IconeCheck size={10} />
+                    </span>
+                  ) : (
+                    mesesComDados.has(chave) && <span className="mes-ponto" aria-label="tem dados salvos" />
+                  )}
                 </button>
               );
             })}
           </div>
 
           <p className="seletor-legenda">
-            <span className="mes-ponto mes-ponto--legenda" /> mês com dados salvos
+            <span>
+              <span className="mes-ponto mes-ponto--legenda" /> com dados salvos
+            </span>
+            <span>
+              <span className="mes-check mes-check--legenda">
+                <IconeCheck size={10} />
+              </span>{" "}
+              concluído
+            </span>
           </p>
         </div>
       )}
