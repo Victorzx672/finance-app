@@ -24,7 +24,8 @@ export function mesAnteriorAberto(emAndamento: string, comDados: ReadonlySet<str
 export type SituacaoMes =
   | { tipo: "concluido" }
   | { tipo: "andamento"; diasRestantes: number | null }
-  | { tipo: "terminou" }
+  /** recente = o mês logo antes do em andamento; os mais antigos não ficam cobrando */
+  | { tipo: "terminou"; recente: boolean }
   | { tipo: "futuro" };
 
 /** Como o mês está: concluído, em andamento (com os dias que faltam), terminado sem concluir ou futuro. */
@@ -36,7 +37,7 @@ export function situacaoDoMes(a: {
   concluido: boolean;
 }): SituacaoMes {
   if (a.concluido) return { tipo: "concluido" };
-  if (a.mes < a.emAndamento) return { tipo: "terminou" };
+  if (a.mes < a.emAndamento) return { tipo: "terminou", recente: a.mes === somarMes(a.emAndamento, -1) };
   if (a.mes > a.emAndamento) return { tipo: "futuro" };
 
   return {
@@ -98,7 +99,7 @@ export function prepararProximoMes(anterior: BaseDoMes, temRendasFixas: boolean)
   const rendas = temRendasFixas
     ? []
     : anterior.rendas.length > 0
-    ? anterior.rendas.map(({ nome, valor }) => ({ nome, valor }))
+    ? anterior.rendas.filter((f) => f.nome.trim() && f.valor > 0).map(({ nome, valor }) => ({ nome, valor }))
     : anterior.renda > 0
     ? [{ nome: "Renda", valor: anterior.renda }]
     : [];
@@ -110,6 +111,12 @@ export function prepararProximoMes(anterior: BaseDoMes, temRendasFixas: boolean)
     percentualInvestimento: anterior.percentualInvestimento,
   };
 }
+
+/**
+ * Só prepara o mês seguinte se ele é o de hoje ou um futuro. Concluir um mês antigo não
+ * inventa dados para o mês seguinte, que também já passou (apareceriam no histórico).
+ */
+export const devePrepararProximo = (proximo: string, hoje: string) => proximo >= hoje;
 
 /** O mês preparado tem algo? (Sem nada, não vale criar o mês só com zeros.) */
 export const temAlgoParaCopiar = (p: ReturnType<typeof prepararProximoMes>) =>

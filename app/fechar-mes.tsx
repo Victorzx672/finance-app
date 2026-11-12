@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { LIMITE_GASTOS_PERCENT, somar, type StatusLimite } from "@/lib/calculos";
 import {
+  devePrepararProximo,
   prepararProximoMes,
   quantasPendencias,
   type BaseDoMes,
   type Pendencias,
   type SituacaoMes,
 } from "@/lib/fechamento";
-import { labelMes } from "@/lib/meses";
+import { chaveMes, labelMes } from "@/lib/meses";
 import { somarMes } from "@/lib/parcelas";
 import { centroDe, soltarConfete } from "./confete";
 import { buscarContas, buscarFinanca, buscarParcelas, buscarRendasFixas } from "./dados";
@@ -54,8 +55,9 @@ export function StatusMes({
       ? `Concluído em ${new Date(concluidoEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`
       : "Concluído";
   } else if (situacao.tipo === "terminou") {
-    tom = "alerta";
-    texto = "Terminou, falta concluir";
+    // só o mês logo antes do em andamento fica em destaque; os antigos não ficam cobrando
+    if (situacao.recente) tom = "alerta";
+    texto = situacao.recente ? "Terminou, falta concluir" : "Mês encerrado";
   } else if (situacao.tipo === "futuro") {
     texto = "Ainda não começou";
   } else if (situacao.diasRestantes === null) {
@@ -77,13 +79,18 @@ export function StatusMes({
           Reabrir
         </button>
       ) : situacao.tipo !== "futuro" ? (
-        <button className="btn btn-primary btn-sm status-mes-concluir" onClick={onConcluir} disabled={!podeAgir}>
+        <button
+          className="btn btn-primary btn-sm status-mes-concluir"
+          onClick={onConcluir}
+          disabled={!podeAgir}
+          aria-label={pendencias > 0 ? `Concluir mês (${plural(pendencias, "item", "itens")} para conferir)` : "Concluir mês"}
+        >
           <IconeCheck size={16} />
           <span>
             Concluir<span className="status-mes-palavra"> mês</span>
           </span>
           {pendencias > 0 && (
-            <span className="status-mes-badge" title={`${plural(pendencias, "item", "itens")} para conferir`}>
+            <span className="status-mes-badge" aria-hidden="true">
               {pendencias}
             </span>
           )}
@@ -134,7 +141,7 @@ function Checagem({
 }) {
   return (
     <li className={`fech-item ${ok ? "fech-item--ok" : "fech-item--pendente"}`}>
-      <span className="fech-item-icone" aria-label={ok ? "em ordem" : "pendente"}>
+      <span className="fech-item-icone" role="img" aria-label={ok ? "em ordem" : "pendente"}>
         {ok ? <IconeCheck size={13} /> : <IconeAlerta size={13} />}
       </span>
       <span className="fech-item-textos">
@@ -248,12 +255,14 @@ export function JanelaFechamento({
   const { saldo, renda, totalGastos, percentGastos, statusLimite } = resultado;
   const percentual = Math.round(percentGastos);
   const diferenca = gastosMesAnterior !== null && gastosMesAnterior > 0 ? totalGastos - gastosMesAnterior : null;
-  const copia = previa && !previa.jaTemDados ? prepararProximoMes(atual, previa.temRendasFixas) : null;
+  // mês seguinte que já passou não é preparado (veja devePrepararProximo)
+  const prepara = devePrepararProximo(proximo, chaveMes(new Date()));
+  const copia = previa && !previa.jaTemDados && prepara ? prepararProximoMes(atual, previa.temRendasFixas) : null;
 
   const itensProximo = previa
     ? [
         previa.rendaFixa > 0 && { rotulo: "Renda fixa", valor: fmt(previa.rendaFixa) },
-        copia && copia.rendas.length > 0 && { rotulo: "Renda (copiada)", valor: fmt(somar(copia.rendas)) },
+        ...(copia ? copia.rendas.map((r) => ({ rotulo: `${r.nome} (copiada)`, valor: fmt(r.valor) })) : []),
         previa.contas.quantidade > 0 && {
           rotulo: plural(previa.contas.quantidade, "conta fixa", "contas fixas"),
           valor: fmt(previa.contas.total),
@@ -295,7 +304,11 @@ export function JanelaFechamento({
           aria-label={`Gastos: ${percentual}% da renda. Limite: ${LIMITE_GASTOS_PERCENT}%.`}
         >
           <span className="fech-barra-uso" style={{ width: `${Math.min(100, percentGastos)}%` }} />
-          <span className="fech-barra-limite" style={{ left: `${LIMITE_GASTOS_PERCENT}%` }} title="Limite de 60%" />
+          <span
+            className="fech-barra-limite"
+            style={{ left: `${LIMITE_GASTOS_PERCENT}%` }}
+            title={`Limite de ${LIMITE_GASTOS_PERCENT}%`}
+          />
         </div>
 
         <dl className="fech-numeros">
@@ -322,7 +335,7 @@ export function JanelaFechamento({
         )}
       </div>
 
-      <section className="fech-secao" aria-label="Antes de concluir">
+      <section className="fech-secao">
         <h3>{pendentes === 0 ? "Tudo em ordem" : "Antes de concluir"}</h3>
 
         <ul className="fech-lista">
@@ -433,11 +446,11 @@ export function JanelaFechamento({
         </ul>
       </section>
 
-      <section className="fech-secao fech-proximo" aria-label={`Como ${nomeDoMes(proximo)} começa`}>
+      <section className="fech-secao fech-proximo">
         <h3>{labelMes(proximo)} começa com</h3>
 
         {!previa ? (
-          <div className="esqueleto fech-proximo-carregando" aria-label="Carregando" />
+          <div className="esqueleto fech-proximo-carregando" role="status" aria-label="Carregando" />
         ) : (
           <>
             {itensProximo.length > 0 ? (
@@ -453,8 +466,10 @@ export function JanelaFechamento({
               <p className="fech-proximo-nota">Nada ainda: ele começa vazio.</p>
             )}
 
-            {previa.jaTemDados && (
+            {previa.jaTemDados ? (
               <p className="fech-proximo-nota">Ele já tem valores salvos, então nada deste mês é copiado.</p>
+            ) : (
+              !prepara && <p className="fech-proximo-nota">Ele já passou, então nada deste mês é copiado.</p>
             )}
           </>
         )}

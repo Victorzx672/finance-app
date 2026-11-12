@@ -1,15 +1,16 @@
 import { getUserIdFromSession } from "@/lib/auth";
 import { erro, lerJson, naoAutorizado } from "@/lib/api";
 import { somar } from "@/lib/calculos";
-import { prepararProximoMes, temAlgoParaCopiar } from "@/lib/fechamento";
+import { devePrepararProximo, prepararProximoMes, temAlgoParaCopiar } from "@/lib/fechamento";
+import { chaveMes } from "@/lib/meses";
 import { MES_REGEX, somarMes } from "@/lib/parcelas";
 import { prisma } from "@/lib/prisma";
 import { contasDoMes } from "@/lib/resumo-mes";
 
 /**
  * Conclui o mês: ele para de aceitar alterações (até ser reaberto) e o mês seguinte, se
- * ainda não tem nada salvo, já nasce com a renda avulsa, as estimativas e a % para
- * investir deste (veja prepararProximoMes). Concluir de novo não muda a data.
+ * ainda não tem nada salvo e não já passou, nasce com a renda avulsa, as estimativas e a %
+ * para investir deste (veja prepararProximoMes). Concluir de novo não muda a data.
  */
 export async function POST(req: Request) {
   const userId = await getUserIdFromSession();
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
-    if (jaExiste) return { concluidoEm, preparado: false };
+    if (jaExiste || !devePrepararProximo(proximo, chaveMes(new Date()))) return { concluidoEm, preparado: false };
 
     const base = prepararProximoMes(atual, contasDoMes(rendasFixas, proximo).length > 0);
     if (!temAlgoParaCopiar(base)) return { concluidoEm, preparado: false };

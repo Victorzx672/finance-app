@@ -197,6 +197,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   const [atalhos, setAtalhos] = useState(false);
   const [fechamentoDe, setFechamentoDe] = useState<string | null>(null); // mês com a janela de fechamento aberta
   const navegou = useRef(false); // o usuário já trocou de mês: o app não pula mais sozinho
+  const mesNaTela = useRef(mesSelecionado); // para respostas que chegam depois de trocar de mês
   const [ocultar, setOcultar] = useState(() => lerArmazenado("fluxopay-ocultar") === "1");
   const [escuro, setEscuro] = useState(
     () => typeof document !== "undefined" && document.documentElement.dataset.tema === "escuro"
@@ -480,6 +481,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
     };
   }, [mesVazio, mesSelecionado]);
 
+  useEffect(() => {
+    mesNaTela.current = mesSelecionado;
+  }, [mesSelecionado]);
+
   // Tema escuro: aplica na página e lembra a escolha
   useEffect(() => {
     document.documentElement.dataset.tema = escuro ? "escuro" : "claro";
@@ -516,6 +521,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       if (!res.ok) {
         // 409: o mês foi concluído (em outra aba, por exemplo) e não aceita mais alterações
         const motivo = res.status === 409 ? ((await res.json().catch(() => ({}))).error as string | undefined) : null;
+        if (res.status === 409) {
+          setConcluidoEm(new Date().toISOString());
+          await carregarHistorico();
+        }
         mostrarAviso("error", motivo ?? "Não foi possível salvar. Suas alterações continuam aqui; tente de novo.");
         return false;
       }
@@ -580,6 +589,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
     protegerSaida("trocar de mês", () => {
       navegou.current = true;
+      setFechamentoDe(null);
       setMesSelecionado(novo);
     });
   };
@@ -873,6 +883,8 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
   };
 
   const pagar = async (chave: string, pago: boolean) => {
+    if (travado) return;
+
     // atualiza na hora; se o servidor recusar, volta ao que estava
     setPagos((prev) => (pago ? [...prev, chave] : prev.filter((p) => p !== chave)));
 
@@ -1046,15 +1058,16 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
 
       if (!res.ok) return (data.error as string | undefined) ?? "Não foi possível concluir o mês.";
 
+      // o histórico chega antes da troca de mês, para o mês seguinte já abrir com a situação certa
+      await carregarHistorico();
       setFechamentoDe(null);
       navegou.current = true;
       setMesSelecionado(data.proximo);
-      await carregarHistorico();
       mostrarAviso(
         "ok",
         data.preparado
           ? `${labelMes(mes)} concluído. ${labelMes(data.proximo)} já começou com a renda e as estimativas de ${nomeDoMes(mes)}.`
-          : `${labelMes(mes)} concluído. Agora é ${nomeDoMes(data.proximo)}.`
+          : `${labelMes(mes)} concluído.`
       );
       return null;
     } catch {
@@ -1078,7 +1091,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
       return;
     }
 
-    setConcluidoEm(null);
+    if (mesNaTela.current === mes) setConcluidoEm(null);
     await carregarHistorico();
     mostrarAviso("ok", `${labelMes(mes)} reaberto para edição.`, 3000);
   };
@@ -1284,7 +1297,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                       <AcaoGuardar
                         investimento={investimento}
                         jaGuardado={investGuardado}
-                        podeGuardar={carregado && !alterado && mesesComDados.has(mesSelecionado)}
+                        podeGuardar={carregado && !alterado && !travado && mesesComDados.has(mesSelecionado)}
                         onGuardar={guardarInvestimento}
                       />
                     ) : undefined
@@ -1461,7 +1474,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                     onFiltro={setFiltro}
                     conteudo={{
                       contas: (
-                        <fieldset className="campos-mes" disabled={travado}>
+                        <div className={travado ? "somente-leitura" : undefined}>
                           <PainelContasFixas
                             embutido
                             mes={mesSelecionado}
@@ -1473,10 +1486,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                             onRemover={removerConta}
                             onPagar={pagar}
                           />
-                        </fieldset>
+                        </div>
                       ),
                       cartao: (
-                        <fieldset className="campos-mes" disabled={travado}>
+                        <div className={travado ? "somente-leitura" : undefined}>
                           <ListaGastos
                             embutido
                             titulo={`Cartão ${CARTAO}`}
@@ -1519,10 +1532,10 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                             onEditar={editarItem}
                             onRemover={removerItem}
                           />
-                        </fieldset>
+                        </div>
                       ),
                       outros: (
-                        <fieldset className="campos-mes" disabled={travado}>
+                        <div className={travado ? "somente-leitura" : undefined}>
                           <ListaGastos
                             embutido
                             titulo="Outros gastos"
@@ -1538,7 +1551,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                             onEditar={editarItem}
                             onRemover={removerItem}
                           />
-                        </fieldset>
+                        </div>
                       ),
                     }}
                   />
@@ -1592,7 +1605,7 @@ export default function Painel({ nomeUsuario, onSair }: { nomeUsuario?: string |
                             <span className="history-month">
                               {labelCurto(item.mesReferencia)}
                               {item.concluido && (
-                                <span className="history-concluido" title="Mês concluído" aria-label="concluído">
+                                <span className="history-concluido" role="img" title="Mês concluído" aria-label="concluído">
                                   <IconeCheck size={11} />
                                 </span>
                               )}

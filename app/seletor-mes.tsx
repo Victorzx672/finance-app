@@ -133,13 +133,13 @@ export function SeletorMes({
                   key={chave}
                   className={`mes-chip ${selecionado ? "mes-chip--ativo" : ""} ${chave === mesAtual ? "mes-chip--hoje" : ""}`}
                   aria-pressed={selecionado}
-                  aria-label={labelMes(chave)}
+                  aria-label={`${labelMes(chave)}${mesesConcluidos.has(chave) ? ", concluído" : ""}`}
                   title={labelMes(chave)}
                   onClick={() => escolher(chave)}
                 >
                   {nome}
                   {mesesConcluidos.has(chave) ? (
-                    <span className="mes-check" aria-label="concluído">
+                    <span className="mes-check" aria-hidden="true">
                       <IconeCheck size={10} />
                     </span>
                   ) : (

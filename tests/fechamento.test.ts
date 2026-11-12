@@ -3,6 +3,7 @@ import {
   mesAnteriorAberto,
   mesEmAndamento,
   pendenciasDoFechamento,
+  devePrepararProximo,
   prepararProximoMes,
   quantasPendencias,
   situacaoDoMes,
@@ -63,8 +64,26 @@ describe("situacaoDoMes", () => {
   });
 
   it("mês que já passou e ficou aberto terminou; depois do em andamento é futuro", () => {
-    expect(situacaoDoMes({ ...base, mes: "2026-10" }).tipo).toBe("terminou");
+    expect(situacaoDoMes({ ...base, mes: "2026-10" })).toEqual({ tipo: "terminou", recente: true });
     expect(situacaoDoMes({ ...base, mes: "2027-01" }).tipo).toBe("futuro");
+  });
+});
+
+describe("situacaoDoMes em meses antigos", () => {
+  it("só o mês logo antes do em andamento é recente (os mais antigos não ficam cobrando)", () => {
+    const base = { hoje: "2026-11", emAndamento: "2026-11", concluido: false, diaHoje: 11 };
+    expect(situacaoDoMes({ ...base, mes: "2026-06" })).toEqual({ tipo: "terminou", recente: false });
+  });
+});
+
+describe("devePrepararProximo", () => {
+  it("prepara o mês seguinte só se ele é o de hoje ou depois", () => {
+    expect(devePrepararProximo("2026-12", "2026-11")).toBe(true);
+    expect(devePrepararProximo("2026-11", "2026-11")).toBe(true);
+  });
+
+  it("concluir um mês antigo não inventa dados para o mês seguinte, que também já passou", () => {
+    expect(devePrepararProximo("2026-07", "2026-11")).toBe(false);
   });
 });
 
@@ -151,6 +170,11 @@ describe("prepararProximoMes", () => {
 
   it("mês antigo sem fontes vira uma fonte só com o total", () => {
     expect(prepararProximoMes({ ...outubro, rendas: [] }, false).rendas).toEqual([{ nome: "Renda", valor: 3200 }]);
+  });
+
+  it("não copia fonte de renda em branco ou zerada", () => {
+    const comVazias = { ...outubro, rendas: [...outubro.rendas, { nome: "", valor: 0 }, { nome: "Bico", valor: 0 }] };
+    expect(prepararProximoMes(comVazias, false).rendas).toEqual(outubro.rendas);
   });
 
   it("renda zerada não cria fonte vazia", () => {
