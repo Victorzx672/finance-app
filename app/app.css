@@ -2255,22 +2255,3 @@ button { -webkit-user-select: none; user-select: none; }
 @media (max-width: 340px) {
   .cards-grid, .history-list { grid-template-columns: minmax(0, 1fr); }
 }
-
-/* Compras do banco (Open Finance). Verde-água marca o que vem do banco, separado do roxo do Nubank. */
-.compras-banco { margin-bottom: 16px; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; border-left: 3px solid var(--teal); }
-.compras-banco-topo { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.compras-banco-topo h2 { margin: 0 0 8px; }
-.compras-banco-contador { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: var(--teal); color: #fff; font-size: 12px; font-weight: 700; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
-.compras-banco-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
-.compras-banco-conexoes { display: flex; flex-wrap: wrap; gap: 6px; }
-.conexao-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px; background: var(--teal-soft); font-size: 13px; color: var(--text-2); }
-.conexao-pill .link-btn { font-size: 12px; }
-.conexao-pill-ponto { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); }
-.conexao-pill--problema { background: var(--amber-soft); color: var(--amber-text); }
-.conexao-pill--problema .conexao-pill-ponto { background: var(--amber); }
-.importar-linha.compras-banco-linha { grid-template-columns: 28px minmax(0, 1fr) auto 32px 32px; }
-.compras-banco-add { color: var(--teal); }
-@media (max-width: 400px) {
-  .compras-banco { padding: 16px; }
-  .importar-linha.compras-banco-linha { gap: 6px; padding: 8px; }
-}
